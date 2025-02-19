@@ -321,6 +321,7 @@ Order.find().populate("user")
 Indexes speed up queries.
 ```javascript
 userSchema.index({ email: 1 }, { unique: true });
+learn about compound indexes and also why should not make every field has index
 ```
 
 ---

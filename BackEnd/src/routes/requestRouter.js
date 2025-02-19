@@ -12,7 +12,7 @@ requestRouter.post(
       const fromUserId = req.user._id;
       const toUserId = req.params.touserId;
       const status = req.params.status;
-      const allowedStatus = ["ignored", "interedted"];
+     
      
       //* If the connection request already exists
 
@@ -25,7 +25,7 @@ requestRouter.post(
       const data = await connectionRequest.save();
 
       res.json({
-        message: "Connection request sent",
+        message: req.user.firstName + " has marked " + status,
         data: data,
       });
     } catch (err) {
