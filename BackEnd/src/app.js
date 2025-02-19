@@ -1,0 +1,32 @@
+const express = require("express");
+const connectDB = require("./config/database");
+const app = express();
+const cookieParser = require("cookie-parser");
+const authRouter = require("./routes/authRouter");
+const requestRouter = require("./routes/requestRouter");
+const profileRouter = require("./routes/profileRouter");
+
+//? Middlewares
+app.use(express.json()); // to read the JSON data send in body
+app.use(cookieParser());
+
+app.use("/", authRouter);
+app.use("/", requestRouter);
+app.use("/", profileRouter);
+
+
+
+
+
+
+
+connectDB()
+  .then(() => {
+    console.log("Connection is Successful");
+    app.listen(3000, () => {
+      console.log("Server is Succesfully Listening on Port 3000");
+    });
+  })
+  .catch((err) => {
+    console.error(err);
+  });
