@@ -8,7 +8,10 @@ const profileRouter = express.Router();
 profileRouter.get("/profile/view", userAuth, async (req, res) => {
   try {
     const user = req.user;
-    res.send(user);
+    res.json({
+      message: "Profile fetched successfully",
+      user: user,
+    });
   } catch (err) {
     res.status(400).send("ERROR : " + err.message);
   }
@@ -40,17 +43,21 @@ profileRouter.patch("/profile/password", userAuth, async (req, res) => {
     const loggedInUser = req.user;
     const { oldpassword, newpassword } = req.body;
     if (oldpassword === newpassword) {
-      return res
-        .status(400)
-        .send("Old password and new password cannot be same");
+      return res.status(400).json({
+        ERROR: "Old password and new password cannot be same",
+      });
     }
     const isValidPassword = await loggedInUser.validatePassword(oldpassword);
     if (!isValidPassword) {
-      return res.status(400).send("Invalid password");
+      return res.status(400).json({
+        ERROR: "Invalid password",
+      });
     }
     const isStrongPassword = validator.isStrongPassword(newpassword);
     if (!isStrongPassword) {
-      return res.status(400).send("Password is not strong enough");
+      return res.status(400).json({
+        ERROR : "Password is not strong enough"
+    });
     }
     const hashedPassword = await bcrypt.hash(newpassword, 10);
     loggedInUser.password = hashedPassword;
@@ -61,7 +68,7 @@ profileRouter.patch("/profile/password", userAuth, async (req, res) => {
   } catch (err) {
     res.status(400).json({
       message: "Error ",
-      data : err.message
+      data: err.message,
     });
   }
 });

@@ -26,7 +26,7 @@ requestRouter.post(
 
       res.json({
         message: req.user.firstName + " has marked " + status,
-        data: data,
+        data: data, 
       });
     } catch (err) {
       res.status(400).json({ message: err.message });

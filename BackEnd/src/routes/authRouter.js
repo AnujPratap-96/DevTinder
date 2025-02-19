@@ -4,8 +4,6 @@ const User = require("../models/user");
 
 const { validateSignUpData } = require("../utils/validation");
 
-
-
 const authRouter = express.Router();
 
 authRouter.post("/signup", validateSignUpData, async (req, res) => {
@@ -22,7 +20,10 @@ authRouter.post("/signup", validateSignUpData, async (req, res) => {
   });
   try {
     await user.save();
-    res.send("User added succesfully");
+    res.json({
+      message: "User added succesfully",
+      user: user,
+    });
   } catch (err) {
     res.status(400).send("Error saving the user" + err.message);
   }
@@ -46,17 +47,22 @@ authRouter.post("/login", async (req, res) => {
     res.cookie("jwt", token, {
       expires: new Date(Date.now() + 8 * 3600000),
     });
-    res.status(200).send("User Logged In Successfully");
+    res.status(200).json({ message: "User Logged In Successfully",
+    user : user
+
+     });
   } catch (err) {
-    res.status(400).send("ERROR : " + err.message);
+    res.status(400).json({
+      ERROR : err.message
+    });
   }
 });
 
-authRouter.post("/logout",  async (req, res) => {
+authRouter.post("/logout", async (req, res) => {
   try {
-    res.cookie("jwt" , null , {
-        expires: new Date(Date.now())
-    })
+    res.cookie("jwt", null, {
+      expires: new Date(Date.now()),
+    });
     res.send("User Logged Out Successfully");
   } catch (err) {
     res.status(400).send("ERROR : " + err.message);
