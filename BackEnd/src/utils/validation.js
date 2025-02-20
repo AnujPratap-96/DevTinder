@@ -19,7 +19,7 @@ const validateSignUpData = (req, res, next) => {
   if (!validator.isStrongPassword(password)) {
     return res.status(400).send("Please enter a strong password");
   }
-  console.log("Validation Complete");
+
 
   next();
 };

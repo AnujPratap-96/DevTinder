@@ -39,7 +39,7 @@ requestRouter.post(
     try {
       const loggedInUser = req.user;
       const { requestId, status } = req.params;
-      console.log(status);
+      
       
 
       const allowedStatus = ["accepted", "rejected"];
