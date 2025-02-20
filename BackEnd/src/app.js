@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 const authRouter = require("./routes/authRouter");
 const requestRouter = require("./routes/requestRouter");
 const profileRouter = require("./routes/profileRouter");
+const userRouter = require("./routes/userRouter");
 const dotenv = require("dotenv");
 dotenv.config();
 
@@ -15,6 +16,7 @@ app.use(cookieParser());
 app.use("/", authRouter);
 app.use("/", requestRouter);
 app.use("/", profileRouter);
+app.use("/", userRouter);
 
 const PORT = process.env.PORT || 3000;
 connectDB()
