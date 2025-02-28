@@ -33,7 +33,7 @@ profileRouter.patch(
         .status(200)
         .json({ message: "Profile updated successfully", user: loggedInUser });
     } catch (err) {
-      res.status(400).send("ERROR : " + err.message);
+      res.status(400).json({ ERROR: err.message });
     }
   }
 );
@@ -56,8 +56,8 @@ profileRouter.patch("/profile/password", userAuth, async (req, res) => {
     const isStrongPassword = validator.isStrongPassword(newpassword);
     if (!isStrongPassword) {
       return res.status(400).json({
-        ERROR : "Password is not strong enough"
-    });
+        ERROR: "Password is not strong enough",
+      });
     }
     const hashedPassword = await bcrypt.hash(newpassword, 10);
     loggedInUser.password = hashedPassword;

@@ -7,11 +7,16 @@ const requestRouter = require("./routes/requestRouter");
 const profileRouter = require("./routes/profileRouter");
 const userRouter = require("./routes/userRouter");
 const dotenv = require("dotenv");
+const cors = require("cors");
 dotenv.config();
 
 //? Middlewares
 app.use(express.json()); // to read the JSON data send in body
 app.use(cookieParser());
+app.use(cors({
+  origin : "http://localhost:5173",
+  credentials : true
+}));
 
 app.use("/", authRouter);
 app.use("/", requestRouter);

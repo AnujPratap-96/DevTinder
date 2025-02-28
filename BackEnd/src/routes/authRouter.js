@@ -63,7 +63,7 @@ authRouter.post("/logout", async (req, res) => {
     res.cookie("jwt", null, {
       expires: new Date(Date.now()),
     });
-    res.send("User Logged Out Successfully");
+    res.json({message :  "User Logged Out Successfully"});
   } catch (err) {
     res.status(400).send("ERROR : " + err.message);
   }
