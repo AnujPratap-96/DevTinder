@@ -20,6 +20,10 @@ authRouter.post("/signup", validateSignUpData, async (req, res) => {
   });
   try {
     await user.save();
+    const token = user.getJWT();
+    res.cookie("jwt", token, {
+      expires: new Date(Date.now() + 8 * 3600000),
+    });
     res.json({
       message: "User added succesfully",
       user: user,
