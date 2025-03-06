@@ -16,7 +16,7 @@ app.use(cookieParser());
 app.use(
   cors({
     origin: [
-      "https://devtinder-frontend-aps.vercel.app/",
+      "https://devtinder-frontend-aps.vercel.app",
       "http://localhost:5173",
     ],
 
