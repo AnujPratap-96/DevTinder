@@ -24,9 +24,7 @@ authRouter.post("/signup", validateSignUpData, async (req, res) => {
     
     res.cookie("token", token, {
       expires: new Date(Date.now() + 8 * 3600000),
-      httpOnly: true, // Prevent access via JavaScript
-      secure: true, // Required for cross-site cookies (must use HTTPS)
-      sameSite: "None", // Allows cookies in cross-origin requests
+      // Allows cookies in cross-origin requests
     });
     
     res.json({
@@ -55,9 +53,7 @@ authRouter.post("/login", async (req, res) => {
     //? Setting the token in cookie
     res.cookie("token", token, {
       expires: new Date(Date.now() + 8 * 3600000),
-      httpOnly: true, // Prevent access via JavaScript
-      secure: true, // Required for cross-site cookies (must use HTTPS)
-      sameSite: "None", // Allows cookies in cross-origin requests
+       // Allows cookies in cross-origin requests
     });
     res.status(200).json({ message: "User Logged In Successfully",
     user : user
