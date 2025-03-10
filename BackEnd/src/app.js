@@ -1,3 +1,5 @@
+const dotenv = require("dotenv");
+dotenv.config();
 const express = require("express");
 const connectDB = require("./config/database");
 const app = express();
@@ -6,19 +8,16 @@ const authRouter = require("./routes/authRouter");
 const requestRouter = require("./routes/requestRouter");
 const profileRouter = require("./routes/profileRouter");
 const userRouter = require("./routes/userRouter");
-const dotenv = require("dotenv");
 const cors = require("cors");
-dotenv.config();
+require("./utils/cronJob");
+
 
 //? Middlewares
 app.use(express.json()); // to read the JSON data send in body
 app.use(cookieParser());
 app.use(
   cors({
-    origin: [
-      "https://devtinder-frontend-aps.vercel.app",
-      "http://localhost:5173",
-    ],
+    origin: ["http://localhost:5173"],
 
     credentials: true, // If using cookies/authentication
   })
@@ -34,7 +33,7 @@ connectDB()
   .then(() => {
     console.log("Connection is Successful");
     app.listen(PORT, () => {
-      console.log("Server is Succesfully Listening on Port 3000");
+      console.log("Server is Succesfully Listening on Port 3000", PORT);
     });
   })
   .catch((err) => {

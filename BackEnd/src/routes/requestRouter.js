@@ -3,6 +3,7 @@ const { userAuth } = require("../middlewares/auth");
 const requestRouter = express.Router();
 const ConnectionRequest = require("../models/connectionRequest");
 const { validateConnectionRequest } = require("../utils/validation");
+const {run} = require("../utils/sendEmail")
 requestRouter.post(
   "/request/send/:status/:touserId",
   userAuth,
@@ -18,13 +19,20 @@ requestRouter.post(
       const connectionRequest = new ConnectionRequest({
         fromUserId: fromUserId,
         toUserId: toUserId,
+
         status: status,
       });
       const data = await connectionRequest.save();
+    
+      const emailRes = await run("New Connection Requested" + req.user.firstName , 
+        req.user.firstName + "has marked you as " + status );
+        console.log(emailRes);
+     
 
       res.json({
         message: req.user.firstName + " has marked " + status,
         data: data,
+        
       });
     } catch (err) {
       res.status(400).json({ message: err.message });
@@ -51,6 +59,7 @@ requestRouter.post(
         toUserId: loggedInUser._id,
         status: "interested",
       })
+
       if(!connectionRequest){
         return res.status(404).json({ message: "Connection Request is not Found" });
       }
@@ -59,6 +68,7 @@ requestRouter.post(
      res.json({
         message: "Connection Request is " + status,
         data: data,
+        
      })
     } catch (err) {
       res.status(400).json({ message: err.message });
