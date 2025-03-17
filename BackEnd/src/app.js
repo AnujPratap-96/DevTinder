@@ -8,6 +8,7 @@ const authRouter = require("./routes/authRouter");
 const requestRouter = require("./routes/requestRouter");
 const profileRouter = require("./routes/profileRouter");
 const userRouter = require("./routes/userRouter");
+const paymentRouter = require("./routes/paymentRouter");
 const cors = require("cors");
 require("./utils/cronJob");
 
@@ -27,6 +28,7 @@ app.use("/", authRouter);
 app.use("/", requestRouter);
 app.use("/", profileRouter);
 app.use("/", userRouter);
+app.use("/", paymentRouter);
 
 const PORT = process.env.PORT || 3000;
 connectDB()
