@@ -11,6 +11,10 @@ const userRouter = require("./routes/userRouter");
 const paymentRouter = require("./routes/paymentRouter");
 const cors = require("cors");
 require("./utils/cronJob");
+const http = require("http");
+const {initializeSocket} = require("./utils/socket");
+const chatRouter = require("./routes/chatRouter");
+
 
 
 //? Middlewares
@@ -29,12 +33,16 @@ app.use("/", requestRouter);
 app.use("/", profileRouter);
 app.use("/", userRouter);
 app.use("/", paymentRouter);
+app.use("/", chatRouter);
+
+const server = http.createServer(app);
+initializeSocket(server);
 
 const PORT = process.env.PORT || 3000;
 connectDB()
   .then(() => {
     console.log("Connection is Successful");
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log("Server is Succesfully Listening on Port 3000", PORT);
     });
   })

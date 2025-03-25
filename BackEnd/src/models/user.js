@@ -30,11 +30,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       minLength: 8,
-      // validate(value) {
-      //   if (validator.isStrongPassword(value)) {
-      //     throw new Error("Password is not strong enough");
-      //   }
-      // }
     },
     age: {
       type: Number,
@@ -55,17 +50,16 @@ const userSchema = new mongoose.Schema(
     membershipType: {
       type: String,
       enum: {
-        values: ["free", "silver", "premium"],
+        values: ["free", "silver", "gold"],
         message: "{VALUE} is not supported",
       },
       default: "free",
     },
     photoUrl: {
-      type: String,
-      default: "https://geograpgyandyou.com/images/user-profile.png",
-      //? By Default this fucntion is only called whne new document is created
+      type: [String],
+      default: ["https://geograpgyandyou.com/images/user-profile.png"],
       validate(value) {
-        if (!validator.isURL(value)) {
+        if (!value.every((url) => validator.isURL(url))) {
           throw new Error("Invalid URL");
         }
       },
@@ -83,7 +77,7 @@ const userSchema = new mongoose.Schema(
 
 userSchema.methods.getJWT = async function () {
   const user = this;
-  const token = await jwt.sign({ _id: user._id }, "anujPratapthakur");
+  const token = await jwt.sign({ _id: user._id }, process.env.JWT_SECRET);
   return token;
 };
 

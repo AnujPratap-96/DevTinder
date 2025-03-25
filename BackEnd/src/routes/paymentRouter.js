@@ -84,4 +84,17 @@ paymentRouter.post("/payment/webhook", async (req, res) => {
   }
 });
 
+paymentRouter.get("/premium/verify", userAuth, async (req, res) => {
+   
+  try {
+    const user = req.user.toJSON();
+   
+    res.status(200).json({ isPremium: user.isPremium, membershipType: user.membershipType , user });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+
+});
+
 module.exports = paymentRouter;
