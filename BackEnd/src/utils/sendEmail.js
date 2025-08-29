@@ -1,58 +1,32 @@
-const { SendEmailCommand } = require("@aws-sdk/client-ses");
-const { sesClient } = require("./sesClient.js");
+const SibApiV3Sdk = require("sib-api-v3-sdk");
 
-const createSendEmailCommand = (toAddress, fromAddress , subject , body) => {
-  return new SendEmailCommand({
-    Destination: {
-      CcAddresses: [],
-      ToAddresses: [
-        toAddress,
-        /* more To-email addresses */
-      ],
-    },
-    Message: {
-      /* required */
-      Body: {
-        /* required */
-        Html: {
-          Charset: "UTF-8",
-          Data: `<h1>${body}</h1>`,
-        },
-        Text: {
-          Charset: "UTF-8",
-          Data: "This is the text format email",
-        },
-      },
-      Subject: {
-        Charset: "UTF-8",
-        Data: subject,
-      },
-    },
-    Source: fromAddress,
-    ReplyToAddresses: [
-      /* more items */
-    ],
-  });
-};
-
-const run = async (subject , body , toEmailId) => {
-  const sendEmailCommand = createSendEmailCommand(
-    toEmailId,
-    "anuj@devs-tinder.site",
-    subject,
-    body
-  );
-
+const run = async (subject, body, toEmailId) => {
   try {
-    return await sesClient.send(sendEmailCommand);
-  } catch (caught) {
-    if (caught instanceof Error && caught.name === "MessageRejected") {
-      const messageRejectedError = caught;
-      return messageRejectedError;
-    }
-    throw caught;
+    // Init Brevo client
+    const client = SibApiV3Sdk.ApiClient.instance;
+    client.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
+
+    const emailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    // Build payload
+    const emailPayload = {
+      to: [{ email: toEmailId }],
+      sender: {
+        name: "DevTinder",
+        email: "no-reply@devs-tinder.site",
+      },
+      subject: subject,
+      htmlContent: `<h1>${body}</h1>`, // you can change this if you want
+      textContent: "This is the text format email", // fallback for clients that don't render HTML
+    };
+
+    // Send email
+    const response = await emailApi.sendTransacEmail(emailPayload);
+    return response;
+  } catch (error) {
+  
+    throw new Error("Email send failed.");
   }
 };
 
-// snippet-end:[ses.JavaScript.email.sendEmailV3]
 module.exports = { run };

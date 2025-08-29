@@ -3,8 +3,9 @@ const User = require("../models/user");
 const ConnectionRequest = require("../models/connectionRequest");
 
 const validateSignUpData = (req, res, next) => {
-  const { firstName, lastName, emailId, password } = req.body;
-  if (!firstName || !lastName || !emailId || !password) {
+  const { firstName, lastName,  password , age , gender } = req.body;
+  const emailId = req.emailId;
+  if (!firstName || !lastName || !emailId || !password || !age || !gender) {
     return res.status(400).send("Please enter all the fields");
   }
   if (firstName.length < 4 || firstName.length > 50) {
@@ -19,7 +20,12 @@ const validateSignUpData = (req, res, next) => {
   if (!validator.isStrongPassword(password)) {
     return res.status(400).send("Please enter a strong password");
   }
-
+  if (age < 1 || age > 100) {
+    return res.status(400).send("Invalid Age");
+  }
+  if (!["male", "female", "other"].includes(gender)) {
+    return res.status(400).send("Invalid Gender");
+  }
 
   next();
 };
@@ -28,13 +34,11 @@ const validateEditProfileData = (req, res, next) => {
   const allowedEditFields = [
     "firstName",
     "lastName",
-    "photoUrl",
     "about",
     "age",
     "gender",
     "skills",
   ];
-
   const isEditAllowed = Object.keys(req.body).every((field) =>
     allowedEditFields.includes(field)
   );

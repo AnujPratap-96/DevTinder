@@ -3,12 +3,14 @@ const { userAuth } = require("../middlewares/auth");
 const { validateEditProfileData } = require("../utils/validation");
 const validator = require("validator");
 const bcrypt = require("bcrypt");
+const upload = require("../config/multer");
+const uploadImageCloudinary = require("../utils/cloudinary");
 const profileRouter = express.Router();
 
 profileRouter.get("/profile/view", userAuth, async (req, res) => {
   try {
     const user = req.user;
-    res.json({
+    res.status(200).json({
       message: "Profile fetched successfully",
       user: user,
     });
@@ -72,5 +74,48 @@ profileRouter.patch("/profile/password", userAuth, async (req, res) => {
     });
   }
 });
+
+profileRouter.patch(
+  "/profile/upload-image",
+  userAuth,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const image = req.file;
+      const { index } = req.body;
+
+      if (!image) {
+        return res.status(400).json({
+          message: "Image file is required",
+        });
+      }
+
+      const uploadImage = await uploadImageCloudinary(image);
+      if (!uploadImage || uploadImage.error) {
+        return res.status(400).json({
+          message: uploadImage?.message || "Error uploading image",
+        });
+      }
+      const user = req.user;
+      if(user.photoUrl[index]){
+        user.photoUrl[index] = uploadImage.secure_url;
+      }
+      else{
+        user.photoUrl.push(uploadImage.secure_url);
+      }
+      await user.save();
+
+      res.status(200).json({
+        message: "Image uploaded successfully",
+        secure_url: uploadImage.secure_url,
+      });
+    } catch (error) {
+      res.status(400).json({
+        message: "Error uploading image",
+        data: error.message,
+      });
+    }
+  }
+);
 
 module.exports = profileRouter;

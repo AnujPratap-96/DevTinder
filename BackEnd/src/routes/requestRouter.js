@@ -3,7 +3,7 @@ const { userAuth } = require("../middlewares/auth");
 const requestRouter = express.Router();
 const ConnectionRequest = require("../models/connectionRequest");
 const { validateConnectionRequest } = require("../utils/validation");
-const {run} = require("../utils/sendEmail")
+const User = require("../models/user");
 requestRouter.post(
   "/request/send/:status/:touserId",
   userAuth,
@@ -14,28 +14,26 @@ requestRouter.post(
       const toUserId = req.params.touserId;
       const status = req.params.status;
 
-      //* If the connection request already exists
+      
 
       const connectionRequest = new ConnectionRequest({
         fromUserId: fromUserId,
         toUserId: toUserId,
-
         status: status,
       });
       const data = await connectionRequest.save();
-    
-      const emailRes = await run("New Connection Requested" + req.user.firstName , 
-        req.user.firstName + "has marked you as " + status );
-        console.log(emailRes);
-     
 
-      res.json({
+      const toUser = await User.findById(toUserId);
+
+     
+        
+      res.status(200).json({
         message: req.user.firstName + " has marked " + status,
         data: data,
         
       });
     } catch (err) {
-      res.status(400).json({ message: err.message });
+      res.status(400).json({ message: err.message + 'Something worng' });
     }
   }
 );
@@ -47,9 +45,6 @@ requestRouter.post(
     try {
       const loggedInUser = req.user;
       const { requestId, status } = req.params;
-      
-      
-
       const allowedStatus = ["accepted", "rejected"];
       if (!allowedStatus.includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
@@ -65,7 +60,7 @@ requestRouter.post(
       }
       connectionRequest.status = status;
      const data = await connectionRequest.save();
-     res.json({
+     res.status(200).json({
         message: "Connection Request is " + status,
         data: data,
         

@@ -57,8 +57,8 @@ const userSchema = new mongoose.Schema(
     },
     photoUrl: {
       type: [String],
-      default: ["https://geograpgyandyou.com/images/user-profile.png"],
-      validate(value) {
+      default: ["https://i.pinimg.com/474x/18/b9/ff/18b9ffb2a8a791d50213a9d595c4dd52.jpg"],
+      validate (value) {
         if (!value.every((url) => validator.isURL(url))) {
           throw new Error("Invalid URL");
         }

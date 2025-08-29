@@ -14,7 +14,7 @@ userRouter.get("/user/requests/received", userAuth, async (req, res) => {
       status: "interested",
     }).populate("fromUserId", SAFE_DATA);
     //? .populate("fromUserId" , "firstName lastName photoUrl about")
-    res.json({ message: "Requests fetched successfully", requests });
+    res.status(200).json({ message: "Requests fetched successfully", requests });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -74,7 +74,7 @@ userRouter.get("/user/feed", userAuth, async (req, res) => {
       .skip(skip)
       .limit(limit);
 
-    res.json({ message: "Feed fetched successfully", users });
+    res.status(200).json({ message: "Feed fetched successfully", users });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
