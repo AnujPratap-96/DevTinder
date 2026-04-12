@@ -5,43 +5,44 @@ const validator = require("validator");
 const bcrypt = require("bcrypt");
 const upload = require("../config/multer");
 const uploadImageCloudinary = require("../utils/cloudinary");
+const asyncHandler = require("express-async-handler");
+const User = require("../models/user");
+const ProfileView = require("../models/profileView");
 const profileRouter = express.Router();
 
-profileRouter.get("/profile/view", userAuth, async (req, res) => {
-  try {
+profileRouter.get("/profile/view", userAuth, asyncHandler(async (req, res) => {
     const user = req.user;
+    user.calculateProfileStrength();
+    await user.save();
     res.status(200).json({
       message: "Profile fetched successfully",
-      user: user,
+      user,
     });
-  } catch (err) {
-    res.status(400).send("ERROR : " + err.message);
-  }
-});
+}));
 
 profileRouter.patch(
   "/profile/edit",
   userAuth,
   validateEditProfileData,
-  async (req, res) => {
-    try {
+  asyncHandler(async (req, res) => {
       const loggedInUser = req.user;
-      Object.keys(req.body).forEach((key) => {
-        loggedInUser[key] = req.body[key];
-      });
-      await loggedInUser.save();
+      
+      const updatedUser = await User.findByIdAndUpdate(
+        loggedInUser._id,
+        req.body,
+        { runValidators: true, returnDocument: "after" }
+      );
+
+      updatedUser.calculateProfileStrength();
+      await updatedUser.save();
 
       res
         .status(200)
-        .json({ message: "Profile updated successfully", user: loggedInUser });
-    } catch (err) {
-      res.status(400).json({ ERROR: err.message });
-    }
-  }
+        .json({ message: "Profile updated successfully", user: updatedUser });
+  })
 );
 
-profileRouter.patch("/profile/password", userAuth, async (req, res) => {
-  try {
+profileRouter.patch("/profile/password", userAuth, asyncHandler(async (req, res) => {
     const loggedInUser = req.user;
     const { oldpassword, newpassword } = req.body;
     if (oldpassword === newpassword) {
@@ -67,20 +68,13 @@ profileRouter.patch("/profile/password", userAuth, async (req, res) => {
     res.json({
       message: "Password updated successfully",
     });
-  } catch (err) {
-    res.status(400).json({
-      message: "Error ",
-      data: err.message,
-    });
-  }
-});
+}));
 
 profileRouter.patch(
   "/profile/upload-image",
   userAuth,
   upload.single("image"),
-  async (req, res) => {
-    try {
+  asyncHandler(async (req, res) => {
       const image = req.file;
       const { index } = req.body;
 
@@ -109,13 +103,88 @@ profileRouter.patch(
         message: "Image uploaded successfully",
         secure_url: uploadImage.secure_url,
       });
-    } catch (error) {
-      res.status(400).json({
-        message: "Error uploading image",
-        data: error.message,
-      });
+  })
+);
+
+profileRouter.patch(
+  "/profile/location",
+  userAuth,
+  asyncHandler(async (req, res) => {
+    const { lat, lng, city, country } = req.body ?? {};
+    if (
+      lat === undefined ||
+      lng === undefined ||
+      Number.isNaN(Number(lat)) ||
+      Number.isNaN(Number(lng))
+    ) {
+      return res.status(400).json({ message: "lat and lng are required" });
     }
-  }
+
+    const user = req.user;
+    user.location = {
+      type: "Point",
+      coordinates: [Number(lng), Number(lat)],
+      city,
+      country,
+    };
+    await user.save();
+    res.status(200).json({ message: "Location updated" });
+  })
+);
+
+profileRouter.patch(
+  "/profile/availability",
+  userAuth,
+  asyncHandler(async (req, res) => {
+    const { availability } = req.body ?? {};
+    if (!availability || !["open", "busy", "not_looking"].includes(availability)) {
+      return res.status(400).json({ message: "Invalid availability" });
+    }
+    const user = req.user;
+    user.availability = availability;
+    await user.save();
+    res.status(200).json({ message: "Availability updated", availability });
+  })
+);
+
+profileRouter.get(
+  "/profile/views",
+  userAuth,
+  asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const views = await ProfileView.find({ viewedUserId: userId })
+      .populate("viewerId", "firstName lastName photoUrl role")
+      .sort({ viewedAt: -1 })
+      .limit(100)
+      .lean();
+    res.status(200).json({ views });
+  })
+);
+
+profileRouter.get(
+  "/profile/:userId",
+  userAuth,
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    const viewerId = req.user._id;
+
+    if (userId === viewerId.toString()) {
+      return res.status(400).json({ message: "Use /profile/view for self" });
+    }
+
+    const profile = await User.findById(userId).select("-password");
+    if (!profile) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    await ProfileView.findOneAndUpdate(
+      { viewerId, viewedUserId: userId },
+      { viewedAt: new Date() },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(200).json({ profile });
+  })
 );
 
 module.exports = profileRouter;

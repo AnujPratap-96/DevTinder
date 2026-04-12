@@ -38,6 +38,10 @@ const validateEditProfileData = (req, res, next) => {
     "age",
     "gender",
     "skills",
+    "role",
+    "experienceYears",
+    "availability",
+    "githubProfile",
   ];
   const isEditAllowed = Object.keys(req.body).every((field) =>
     allowedEditFields.includes(field)
@@ -48,12 +52,36 @@ const validateEditProfileData = (req, res, next) => {
   if (req.body.age && (req.body.age < 1 || req.body.age > 100)) {
     return res.status(400).send("Invalid Age");
   }
+  if (req.body.skills && !Array.isArray(req.body.skills)) {
+    return res.status(400).send("Skills must be an array");
+  }
+  if (Array.isArray(req.body.skills) && req.body.skills.length > 20) {
+    return res.status(400).send("Too many skills provided");
+  }
+  if (req.body.role && ![
+      "frontend",
+      "backend",
+      "fullstack",
+      "mobile",
+      "design",
+      "product",
+      "data",
+      "devops",
+      "other",
+    ].includes(req.body.role)) {
+    return res.status(400).send("Invalid role");
+  }
   if (
-    req.body.skills &&
-    !Array.isArray(req.body.skills) &&
-    req.body.skills.length > 10
+    req.body.experienceYears !== undefined &&
+    (req.body.experienceYears < 0 || req.body.experienceYears > 60)
   ) {
-    return res.status(400).send("Invalid Skills");
+    return res.status(400).send("Invalid experience value");
+  }
+  if (
+    req.body.availability &&
+    !["open", "busy", "not_looking"].includes(req.body.availability)
+  ) {
+    return res.status(400).send("Invalid availability value");
   }
   if (req.body.about && req.body.about.length > 1000) {
     return res.status(400).send("About should be less than 1000 characters");

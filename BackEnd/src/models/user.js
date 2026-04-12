@@ -57,7 +57,7 @@ const userSchema = new mongoose.Schema(
     },
     photoUrl: {
       type: [String],
-      default: ["https://i.pinimg.com/474x/18/b9/ff/18b9ffb2a8a791d50213a9d595c4dd52.jpg"],
+      default: ["https://ui-avatars.com/api/?name=User&background=random"],
       validate (value) {
         if (!value.every((url) => validator.isURL(url))) {
           throw new Error("Invalid URL");
@@ -71,9 +71,125 @@ const userSchema = new mongoose.Schema(
     skills: {
       type: [String],
     },
+    role: {
+      type: String,
+      enum: [
+        "frontend",
+        "backend",
+        "fullstack",
+        "mobile",
+        "design",
+        "product",
+        "data",
+        "devops",
+        "other",
+      ],
+      default: "fullstack",
+    },
+    experienceYears: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    githubProfile: {
+      username: { type: String, trim: true },
+      avatarUrl: { type: String, trim: true },
+      repos: {
+        type: [
+          {
+            name: String,
+            htmlUrl: String,
+            description: String,
+            stargazersCount: Number,
+            language: String,
+            updatedAt: Date,
+          },
+        ],
+        default: [],
+      },
+      stats: {
+        totalStars: { type: Number, default: 0 },
+        topLanguages: { type: [String], default: [] },
+        followers: { type: Number, default: 0 },
+      },
+      lastSyncedAt: Date,
+    },
+    profileStrength: {
+      score: { type: Number, min: 0, max: 100, default: 0 },
+      missingFields: { type: [String], default: [] },
+      lastEvaluatedAt: Date,
+    },
+    availability: {
+      type: String,
+      enum: ["open", "busy", "not_looking"],
+      default: "open",
+    },
+    isAdmin: {
+      type: Boolean,
+      default: false,
+    },
+    isBanned: {
+      type: Boolean,
+      default: false,
+    },
+    blockedUsers: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+    },
+location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+      coordinates: {
+        type: [Number],
+        default: [0, 0],
+      },
+      city: String,
+      country: String,
+    },
+    lastSeenAt: {
+      type: Date,
+      default: null,
+    },
+    isOnline: {
+      type: Boolean,
+      default: false,
+    },
+    oauthProviders: {
+      type: [
+        {
+          provider: { type: String, enum: ["google", "github"] },
+          providerId: { type: String },
+          accessToken: { type: String },
+          refreshToken: { type: String },
+          expiresAt: { type: Date },
+        },
+      ],
+      default: [],
+    },
+    bookmarks: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+    },
   },
   { timestamps: true }
 );
+
+userSchema.index({ location: "2dsphere" });
+userSchema.index({ role: 1 });
+userSchema.index({ availability: 1 });
+
+userSchema.pre("save", function (next) {
+  if (this.location && this.location.type === "Point" && !this.location.coordinates) {
+    this.location.coordinates = [0, 0];
+  }
+  if (!this.profileStrength?.score || this.profileStrength?.score === 0) {
+    this.calculateProfileStrength();
+  }
+  next();
+});
 
 userSchema.methods.getJWT = async function () {
   const user = this;
@@ -85,6 +201,55 @@ userSchema.methods.validatePassword = async function (passwordByUser) {
   const user = this;
   const isValidPassword = await bcrypt.compare(passwordByUser, user.password);
   return isValidPassword;
+};
+
+userSchema.methods.calculateProfileStrength = function () {
+  const requiredFields = [
+    { key: "firstName", weight: 15 },
+    { key: "lastName", weight: 5 },
+    { key: "about", weight: 15 },
+    { key: "skills", weight: 15 },
+    { key: "photoUrl", weight: 10 },
+    { key: "githubProfile.username", weight: 10 },
+    { key: "experienceYears", weight: 10 },
+    { key: "role", weight: 10 },
+    { key: "gender", weight: 5 },
+    { key: "age", weight: 5 },
+  ];
+
+  let score = 0;
+  const missingFields = [];
+  const getNestedValue = (obj, path) => path.split(".").reduce((acc, part) => acc?.[part], obj);
+
+  requiredFields.forEach(({ key, weight }) => {
+    const value = getNestedValue(this, key);
+    let hasValue = false;
+
+    if (value === undefined || value === null) {
+      hasValue = false;
+    } else if (Array.isArray(value)) {
+      hasValue = value.length > 0;
+    } else if (typeof value === "string") {
+      hasValue = value.trim().length > 0;
+    } else {
+      hasValue = !!value;
+    }
+
+    if (hasValue) {
+      score += weight;
+    } else {
+      missingFields.push(key);
+    }
+  });
+
+  score = Math.min(score, 100);
+
+  this.profileStrength = {
+    score,
+    missingFields,
+    lastEvaluatedAt: new Date(),
+  };
+  return this.profileStrength;
 };
 
 module.exports = mongoose.model("User", userSchema);
