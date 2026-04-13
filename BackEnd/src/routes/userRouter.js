@@ -5,6 +5,7 @@ const { userAuth } = require("../middlewares/auth");
 const ConnectionRequest = require("../models/connectionRequest");
 const Bookmark = require("../models/bookmark");
 const User = require("../models/user");
+const { Chat } = require("../models/chat");
 const asyncHandler = require("express-async-handler");
 const { haversineDistanceKm } = require("../utils/location");
 
@@ -20,6 +21,9 @@ const SAFE_DATA = [
   "experienceYears",
   "availability",
   "githubProfile",
+  "socialLinks",
+  "isOnline",
+  "lastSeenAt",
 ];
 
 const buildConnectionExclusionSet = (connections, loggedInUserId) => {
@@ -82,7 +86,6 @@ userRouter.get("/user/requests/received", userAuth, asyncHandler(async (req, res
       toUserId: loggedInUser._id,
       status: "interested",
     }).populate("fromUserId", SAFE_DATA);
-    //? .populate("fromUserId" , "firstName lastName photoUrl about")
     res.status(200).json({ message: "Requests fetched successfully", requests });
 }));
 
@@ -96,12 +99,26 @@ userRouter.get("/user/connections", userAuth, asyncHandler(async (req, res) => {
     })
       .populate("fromUserId", SAFE_DATA)
       .populate("toUserId", SAFE_DATA);
+
     if (connections.length === 0) {
-      return res.json({ message: "No connections found" });
+      return res.json({ message: "No connections found", data: [] });
     }
+
+    const chats = await Chat.find({ participants: { $in: [loggedInUser._id] } }).lean();
+
     const data = connections.map((row) => {
-      if (row.fromUserId._id.equals(loggedInUser._id)) return row.toUserId;
-      return row.fromUserId;
+      const targetUser = row.fromUserId._id.equals(loggedInUser._id) ? row.toUserId : row.fromUserId;
+      const chat = chats.find(c =>
+        c.participants.some(p => p.toString() === targetUser._id.toString()) &&
+        c.participants.some(p => p.toString() === loggedInUser._id.toString())
+      );
+      const targetData = targetUser.toObject ? targetUser.toObject() : targetUser;
+      return {
+        ...targetData,
+        unreadCount: chat?.unreadCounts?.get?.(loggedInUser._id.toString()) || chat?.unreadCounts?.[loggedInUser._id.toString()] || 0,
+        lastMessageAt: chat?.lastMessageAt || null,
+        matchId: chat?._id || null,
+      };
     });
     res.json({ message: "Connections fetched successfully", data });
 }));
@@ -170,6 +187,9 @@ const baseFeedHandler = async (req, res) => {
           githubProfile: 1,
           location: 1,
           distanceMeters: 1,
+          isOnline: 1,
+          lastSeenAt: 1,
+          socialLinks: 1,
         },
       },
       { $skip: skip },
@@ -195,7 +215,6 @@ userRouter.get("/feed", userAuth, asyncHandler(baseFeedHandler));
 
 userRouter.get("/users", userAuth, asyncHandler(async (req, res) => {
   const loggedInUser = await User.findById(req.user._id).lean();
-
   const { role, availability, skills, minExperience, maxExperience, lat, lng, radius } = req.query ?? {};
 
   const matchStage = {
@@ -204,16 +223,65 @@ userRouter.get("/users", userAuth, asyncHandler(async (req, res) => {
     isBanned: { $ne: true },
   };
 
-  if (role) {
-    matchStage.role = role;
-  }
-  if (availability) {
-    matchStage.availability = availability;
-  }
+  if (role) matchStage.role = role;
+  if (availability) matchStage.availability = availability;
 
   const skillList = typeof skills === "string" ? skills.split(",").map((s) => s.trim()).filter(Boolean) : [];
-  if (skillList.length) {
-    matchStage.skills = { $all: skillList };
+  if (skillList.length) matchStage.skills = { $all: skillList };
+
+  const expFilters = [];
+  if (minExperience !== undefined) expFilters.push({ experienceYears: { $gte: Number(minExperience) } });
+  if (maxExperience !== undefined) expFilters.push({ experienceYears: { $lte: Number(maxExperience) } });
+
+  const geoStage = lat && lng ? [{
+    $geoNear: {
+      near: { type: "Point", coordinates: [Number(lng), Number(lat)] },
+      distanceField: "distanceMeters",
+      spherical: true,
+      maxDistance: radius ? Number(radius) * 1000 : 1000 * 1000,
+    },
+  }] : [];
+
+  const pipeline = [
+    ...geoStage,
+    { $match: matchStage },
+  ];
+  if (expFilters.length) pipeline.push({ $match: { $and: expFilters } });
+
+  pipeline.push({
+    $project: {
+      firstName: 1, lastName: 1, photoUrl: 1, about: 1, age: 1, gender: 1,
+      skills: 1, role: 1, experienceYears: 1, availability: 1, githubProfile: 1,
+      location: 1, distanceMeters: 1, isOnline: 1, lastSeenAt: 1, socialLinks: 1
+    }
+  }, { $limit: 100 });
+
+  const results = await User.aggregate(pipeline);
+  const mapped = results.map(c => mapCandidate(loggedInUser, c));
+  res.status(200).json({ users: mapped });
+}));
+
+userRouter.get("/search", userAuth, asyncHandler(async (req, res) => {
+  const loggedInUser = await User.findById(req.user._id).lean();
+  const { q, role, minExperience, maxExperience } = req.query;
+
+  const matchStage = {
+    _id: { $ne: loggedInUser._id },
+    blockedUsers: { $ne: loggedInUser._id },
+    isBanned: { $ne: true },
+  };
+
+  if (q && q.trim()) {
+    const searchRegex = new RegExp(q.trim(), "i");
+    matchStage.$or = [
+      { firstName: { $regex: searchRegex } },
+      { lastName: { $regex: searchRegex } },
+      { skills: { $regex: searchRegex } },
+    ];
+  }
+
+  if (role) {
+    matchStage.role = role;
   }
 
   const expFilters = [];
@@ -224,22 +292,7 @@ userRouter.get("/users", userAuth, asyncHandler(async (req, res) => {
     expFilters.push({ experienceYears: { $lte: Number(maxExperience) } });
   }
 
-  const geoStage = lat && lng ? (() => {
-    const stage = {
-      $geoNear: {
-        near: { type: "Point", coordinates: [Number(lng), Number(lat)] },
-        distanceField: "distanceMeters",
-        spherical: true,
-      },
-    };
-    if (radius) {
-      stage.$geoNear.maxDistance = Number(radius) * 1000;
-    }
-    return [stage];
-  })() : [];
-
   const pipeline = [
-    ...geoStage,
     { $match: matchStage },
   ];
 
@@ -247,29 +300,58 @@ userRouter.get("/users", userAuth, asyncHandler(async (req, res) => {
     pipeline.push({ $match: { $and: expFilters } });
   }
 
-  pipeline.push(
-    {
-      $project: {
-        firstName: 1,
-        lastName: 1,
-        photoUrl: 1,
-        about: 1,
-        age: 1,
-        gender: 1,
-        skills: 1,
-        role: 1,
-        experienceYears: 1,
-        availability: 1,
-        githubProfile: 1,
-        location: 1,
-        distanceMeters: 1,
-      },
-    },
-    { $limit: 100 },
-  );
+  pipeline.push({ $sort: { firstName: 1 } });
+  pipeline.push({ $limit: 20 });
+
+  pipeline.push({
+    $project: {
+      firstName: 1,
+      lastName: 1,
+      photoUrl: 1,
+      about: 1,
+      age: 1,
+      gender: 1,
+      skills: 1,
+      role: 1,
+      experienceYears: 1,
+      availability: 1,
+      githubProfile: 1,
+      socialLinks: 1,
+      location: 1,
+      isOnline: 1,
+      lastSeenAt: 1,
+    }
+  });
 
   const results = await User.aggregate(pipeline);
-  const mapped = results.map((candidate) => mapCandidate(loggedInUser, candidate));
+  
+  // Calculate relationship status
+  const targetIds = results.map(r => r._id);
+  const relevantRequests = await ConnectionRequest.find({
+    $or: [
+      { fromUserId: loggedInUser._id, toUserId: { $in: targetIds } },
+      { toUserId: loggedInUser._id, fromUserId: { $in: targetIds } },
+    ],
+  }).lean();
+
+  const mapped = results.map(c => {
+    const candidate = mapCandidate(loggedInUser, c);
+    const request = relevantRequests.find(r => 
+      (r.fromUserId.toString() === loggedInUser._id.toString() && r.toUserId.toString() === c._id.toString()) ||
+      (r.toUserId.toString() === loggedInUser._id.toString() && r.fromUserId.toString() === c._id.toString())
+    );
+
+    let status = "none";
+    if (request) {
+      if (request.status === "accepted") {
+        status = "connected";
+      } else if (request.status === "interested") {
+        status = request.fromUserId.toString() === loggedInUser._id.toString() ? "pending_sent" : "pending_received";
+      }
+    }
+    candidate.relationshipStatus = status;
+    return candidate;
+  });
 
   res.status(200).json({ users: mapped });
 }));

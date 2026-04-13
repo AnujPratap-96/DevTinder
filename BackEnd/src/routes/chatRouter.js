@@ -120,6 +120,9 @@ chatRouter.patch("/messages/seen", userAuth, async (req, res) => {
 
     const result = await Message.markAsSeen({ matchId, receiverId: userId });
 
+    const unreadResetKey = `unreadCounts.${userId}`;
+    await Chat.findByIdAndUpdate(matchId, { $set: { [unreadResetKey]: 0 } });
+
     res.status(200).json({
       updated: result.modifiedCount ?? result.nModified ?? 0,
     });

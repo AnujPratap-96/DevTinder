@@ -161,6 +161,28 @@ profileRouter.get(
   })
 );
 
+// Record a profile view
+profileRouter.post(
+  "/profile/view/:userId",
+  userAuth,
+  asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    const viewerId = req.user._id;
+
+    if (userId === viewerId.toString()) {
+      return res.status(200).json({ message: "Self view not recorded" });
+    }
+
+    await ProfileView.findOneAndUpdate(
+      { viewerId, viewedUserId: userId },
+      { viewedAt: new Date() },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(200).json({ message: "View recorded" });
+  })
+);
+
 profileRouter.get(
   "/profile/:userId",
   userAuth,

@@ -17,6 +17,7 @@ const projectRouter = require("./routes/projectRouter");
 const bookmarkRouter = require("./routes/bookmarkRouter");
 const githubRouter = require("./routes/githubRouter");
 const adminRouter = require("./routes/adminRouter");
+const aiRouter = require("./routes/aiRouter");
 const cors = require("cors");
 require("./utils/cronJob");
 const http = require("http");
@@ -51,6 +52,7 @@ app.use("/", projectRouter);
 app.use("/", bookmarkRouter);
 app.use("/", githubRouter);
 app.use("/", adminRouter);
+app.use("/", aiRouter);
 
 const server = http.createServer(app);
 initializeSocket(server);

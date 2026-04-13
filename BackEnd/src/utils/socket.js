@@ -6,31 +6,56 @@ const Notification = require("../models/notification");
 const User = require("../models/user");
 
 const activeUsers = new Map(); // userId -> Set<socketId>
+const offlineTimeouts = new Map(); // userId -> NodeJS.Timeout
 const rateTracker = new Map(); // userId -> number[] timestamps
 
 const RATE_LIMIT_WINDOW_MS = 2000;
 const RATE_LIMIT_MAX_MESSAGES = 8;
+const OFFLINE_DELAY_MS = 5000;
 
 const registerSocketForUser = (userId, socket) => {
   if (!userId) return;
   const userKey = userId.toString();
+  
+  // Clear any pending offline marking
+  if (offlineTimeouts.has(userKey)) {
+    clearTimeout(offlineTimeouts.get(userKey));
+    offlineTimeouts.delete(userKey);
+  }
+
   const sockets = activeUsers.get(userKey) ?? new Set();
   sockets.add(socket.id);
   activeUsers.set(userKey, sockets);
+
+  if (sockets.size === 1) {
+    User.findByIdAndUpdate(userKey, { $set: { isOnline: true } }).catch(() => {});
+  }
   socket.data.userId = userKey;
 };
 
-const unregisterSocketForUser = (socket) => {
-  const { userId } = socket.data;
+const unregisterSocketForUser = (socketInstance) => {
+  const { userId } = socketInstance.data;
   if (!userId) return;
   const sockets = activeUsers.get(userId);
   if (!sockets) return;
-  sockets.delete(socket.id);
+  
+  sockets.delete(socketInstance.id);
+  
   if (sockets.size === 0) {
-    activeUsers.delete(userId);
-    User.findByIdAndUpdate(userId, {
-      $set: { isOnline: false, lastSeenAt: new Date() },
-    }).catch(() => {});
+    // Start delay before marking offline
+    const timeout = setTimeout(async () => {
+      // Re-verify after delay
+      const currentSockets = activeUsers.get(userId);
+      if (!currentSockets || currentSockets.size === 0) {
+        activeUsers.delete(userId);
+        offlineTimeouts.delete(userId);
+        await User.findByIdAndUpdate(userId, {
+          $set: { isOnline: false, lastSeenAt: new Date() },
+        }).catch(() => {});
+      }
+    }, OFFLINE_DELAY_MS);
+    
+    offlineTimeouts.set(userId, timeout);
   }
 };
 
@@ -136,9 +161,19 @@ const initializeSocket = (server) => {
 
         const roomId = chat.getRoomId();
         socketInstance.join(roomId);
+
+        // Reset unread count for this user
+        const unreadResetKey = `unreadCounts.${userId}`;
+        const updatedChat = await Chat.findByIdAndUpdate(
+          chat._id,
+          { $set: { [unreadResetKey]: 0 } },
+          { new: true }
+        );
+
         socketInstance.emit("chat:joined", {
           matchId: chat._id,
           participants: chat.participants,
+          unreadCounts: updatedChat.unreadCounts,
         });
 
         await markMessagesDeliveredForUser({
@@ -203,7 +238,16 @@ const initializeSocket = (server) => {
             metadata,
           });
 
-          await Chat.findByIdAndUpdate(chat._id, { lastMessageAt: new Date() });
+          // Increment unread count for receiver
+          const unreadIncKey = `unreadCounts.${receiverId}`;
+          const updatedChat = await Chat.findByIdAndUpdate(
+            chat._id,
+            { 
+              $set: { lastMessageAt: new Date() },
+              $inc: { [unreadIncKey]: 1 }
+            },
+            { new: true }
+          );
 
           const formatted = formatMessage(newMessage);
 
@@ -215,6 +259,14 @@ const initializeSocket = (server) => {
             );
             formatted.delivered = true;
             formatted.deliveredAt = new Date();
+            
+            // Emit unread update to receiver
+            receiverSockets.forEach(sid => {
+              io.to(sid).emit("unread:update", {
+                matchId: chat._id,
+                unreadCounts: updatedChat.unreadCounts
+              });
+            });
           }
 
           await Notification.create({
@@ -239,8 +291,22 @@ const initializeSocket = (server) => {
     socketInstance.on("message:seen", async ({ userId, matchId }) => {
       try {
         if (!userId || !matchId) return;
+        
         await Message.markAsSeen({ matchId, receiverId: userId });
+        
+        // Reset unread count on seen
+        const unreadResetKey = `unreadCounts.${userId}`;
+        const updatedChat = await Chat.findByIdAndUpdate(
+          matchId,
+          { $set: { [unreadResetKey]: 0 } },
+          { new: true }
+        );
+
         io.to(matchId.toString()).emit("messages:seen", { userId, matchId });
+        socketInstance.emit("unread:update", {
+          matchId,
+          unreadCounts: updatedChat.unreadCounts
+        });
       } catch (error) {
         socketInstance.emit("chat:error", { message: error.message });
       }

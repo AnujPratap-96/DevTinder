@@ -404,4 +404,42 @@ projectRouter.delete("/project/delete-all", userAuth, async (req, res) => {
   res.status(200).json({ message: "All projects deleted", deleted: result.deletedCount });
 });
 
+projectRouter.patch("/project/:projectId", userAuth, async (req, res) => {
+  const { projectId } = req.params;
+  const { title, description, techStack, status } = req.body ?? {};
+  const userId = req.user._id;
+
+  const project = await Project.findById(projectId);
+  if (!project) return res.status(404).json({ message: "Project not found" });
+
+  const role = project.getUserRole(userId);
+  if (!["owner", "admin"].includes(role)) {
+    return res.status(403).json({ message: "Access denied. Only owner or admin can edit the project." });
+  }
+
+  if (title) project.title = title;
+  if (description) project.description = description;
+  if (techStack) project.techStack = techStack;
+  if (status) project.status = status;
+
+  await project.save();
+  res.status(200).json({ project, message: "Project updated successfully" });
+});
+
+projectRouter.delete("/project/:projectId", userAuth, async (req, res) => {
+  const { projectId } = req.params;
+  const userId = req.user._id;
+
+  const project = await Project.findById(projectId);
+  if (!project) return res.status(404).json({ message: "Project not found" });
+
+  const role = project.getUserRole(userId);
+  if (!["owner", "admin"].includes(role)) {
+    return res.status(403).json({ message: "Access denied. Only owner or admin can delete the project." });
+  }
+
+  await Project.findByIdAndDelete(projectId);
+  res.status(200).json({ message: "Project deleted successfully" });
+});
+
 module.exports = projectRouter;

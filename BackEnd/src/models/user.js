@@ -173,10 +173,16 @@ location: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
+    socialLinks: {
+      github: { type: String, trim: true },
+      linkedin: { type: String, trim: true },
+      portfolio: { type: String, trim: true },
+    },
   },
   { timestamps: true }
 );
 
+userSchema.index({ firstName: "text", lastName: "text", skills: "text" });
 userSchema.index({ location: "2dsphere" });
 userSchema.index({ role: 1 });
 userSchema.index({ availability: 1 });
