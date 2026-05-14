@@ -4,15 +4,19 @@
  * live here so routes / controllers stay clean and testable.
  */
 
+import axios from "axios";
+import config from "../config/env.js";
+
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
-const MODEL = "mistral-small-latest"; // fast, cheap, great for structured output
+const MODEL = "mistral-small-latest";
 
 // ─────────────────────────────────────────────────────────────
 // Helper: call Mistral with a timeout
 // ─────────────────────────────────────────────────────────────
 const callMistral = async (messages, { temperature = 0.7, maxTokens = 400 } = {}) => {
-  const apiKey = process.env.MISTRAL_API_KEY;
-  if (!apiKey) throw new Error("MISTRAL_API_KEY is not configured");
+  const apiKey = config.ai.mistralApiKey;
+
+  if (!apiKey) throw new Error("MISTRAL_API_KEY is not configured in ENV");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000); // 15 s timeout
@@ -229,11 +233,220 @@ const explainMatch = async ({ userA, userB }) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// 5. AI Project Description Generator
+// ─────────────────────────────────────────────────────────────
+const generateProjectDescription = async ({ title, techStack }) => {
+  const titleText = sanitise(title) || "New Tech Project";
+  const techText = sanitiseArray(techStack).join(", ") || "various technologies";
+
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are an expert product manager. Your task is to write a compelling, concise project description (2-4 sentences). " +
+        "Focus on the value proposition and goals. Avoid generic corporate fluff.",
+    },
+    {
+      role: "user",
+      content:
+        `Generate a project description for a project titled "${titleText}".\n` +
+        `Current Tech Stack: ${techText}\n\n` +
+        `Return ONLY the description text, no labels, no quotes.`,
+    },
+  ];
+
+  
+  const description = await callMistral(messages, { temperature: 0.8, maxTokens: 250 });
+  return description;
+};
+
+// ─────────────────────────────────────────────────────────────
+// 6. AI Project Tech Stack Suggestions
+// ─────────────────────────────────────────────────────────────
+const suggestProjectTechStack = async ({ title, description }) => {
+  const titleText = sanitise(title) || "New Tech Project";
+  const descText = sanitise(description) || "";
+
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are a technical architect. Based on a project title and description, suggest a modern, cohesive tech stack. " +
+        "You always return a raw JSON array of strings and nothing else.",
+    },
+    {
+      role: "user",
+      content:
+        `Suggest 8 modern technologies/tools for a project with this info:\n` +
+        `Title: ${titleText}\n` +
+        `Description: ${descText}\n\n` +
+        `TASK:\n` +
+        `1. Provide 8 relevant technologies (languages, frameworks, databases, etc.)\n` +
+        `2. Ensure they work well together (e.g., if you suggest React, suggest Node.js).\n` +
+        `3. Return ONLY a JSON array of strings, e.g. ["React","Node.js",...]\n` +
+        `- No markdown, no extra text.`,
+    },
+  ];
+
+  const raw = await callMistral(messages, { temperature: 0.6, maxTokens: 200 });
+
+  const match = raw.match(/\[[\s\S]*?\]/);
+  if (!match) throw new Error("AI returned malformed tech stack list");
+
+  const parsed = JSON.parse(match[0]);
+  if (!Array.isArray(parsed)) throw new Error("AI tech stack list is not an array");
+
+  return parsed.slice(0, 10);
+};
+
+// ─────────────────────────────────────────────────────────────
+// 7. AI Project Roadmap Generator
+// ─────────────────────────────────────────────────────────────
+const generateProjectRoadmap = async ({ title, description, techStack }) => {
+  const titleText = sanitise(title) || "New Tech Project";
+  const descText = sanitise(description) || "";
+  const techText = sanitiseArray(techStack).join(", ") || "various tech";
+
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are an expert technical project manager. Create a detailed 4-phase development roadmap. " +
+        "Each phase should have a title and 3-4 specific tasks. " +
+        "Return ONLY a JSON object with a 'phases' array. No markdown.",
+    },
+    {
+      role: "user",
+      content:
+        `Generate a roadmap for:\n` +
+        `Title: ${titleText}\n` +
+        `Description: ${descText}\n` +
+        `Tech Stack: ${techText}\n\n` +
+        `Return valid JSON only:\n` +
+        `{"phases": [{"title": "Phase 1: ...", "tasks": ["task1", "task2", "task3"]}]}`,
+    },
+  ];
+
+  const raw = await callMistral(messages, { temperature: 0.2, maxTokens: 800 });
+
+  let jsonStr = raw;
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    jsonStr = raw.substring(firstBrace, lastBrace + 1);
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (!Array.isArray(parsed?.phases)) throw new Error("AI roadmap missing 'phases' array");
+    return parsed.phases;
+  } catch (err) {
+    console.error("AI Roadmap JSON error:", err, "Raw response:", raw);
+    throw new Error("AI returned malformed roadmap data. Please try again.");
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// 8. GitHub Bio Sync
+// ─────────────────────────────────────────────────────────────
+const syncGitHubData = async (githubUsername, githubToken = null) => {
+  if (!githubUsername) throw new Error("GitHub username is required");
+
+  // Fetch repositories from GitHub API (Authenticated if token provided)
+  const headers = {};
+  if (githubToken) {
+    headers.Authorization = `token ${githubToken}`;
+  }
+
+  const reposResponse = await axios.get(
+    `https://api.github.com/users/${githubUsername}/repos?sort=updated&per_page=15`,
+    { headers }
+  );
+  const repos = reposResponse.data.map((r) => ({
+    name: r.name,
+    lang: r.language,
+    desc: r.description,
+  }));
+
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are an expert career coach for developers. Analyze GitHub repositories and generate: " +
+        "1. A professional developer bio (max 200 chars). " +
+        "2. A list of exactly 8 core skills. " +
+        "Return ONLY a JSON object: { 'bio': '...', 'skills': ['...', '...'] }. No markdown.",
+    },
+    {
+      role: "user",
+      content: `Analyze these repos for ${githubUsername}:\n${JSON.stringify(repos)}`,
+    },
+  ];
+
+  const raw = await callMistral(messages, { temperature: 0.5 });
+  const match = raw.match(/\{[\s\S]*?\}/);
+  if (!match) throw new Error("AI returned malformed GitHub sync JSON");
+
+  return JSON.parse(match[0]);
+};
+
+// ─────────────────────────────────────────────────────────────
+// 9. AI Collaboration Suggestion (Coding Date)
+// ─────────────────────────────────────────────────────────────
+const suggestCollaborationActivity = async ({ userA, userB }) => {
+  const skillsA = sanitiseArray(userA?.skills).join(", ") || "various tech";
+  const skillsB = sanitiseArray(userB?.skills).join(", ") || "various tech";
+  const roleA = sanitise(userA?.role) || "developer";
+  const roleB = sanitise(userB?.role) || "developer";
+
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are a specialized matchmaker for developers. Suggest a specific project or learning activity for two developers to work on together. " +
+        "Find common ground or complementary skills. " +
+        "Return ONLY a JSON object: { 'title': 'Project Name', 'description': '...', 'why': '...' }. No markdown.",
+    },
+    {
+      role: "user",
+      content:
+        `Developer A: ${roleA} (${skillsA})\n` +
+        `Developer B: ${roleB} (${skillsB})\n\n` +
+        `Suggest a collaborative activity. Return valid JSON only.`,
+    },
+  ];
+
+  const raw = await callMistral(messages, { temperature: 0.8, maxTokens: 300 });
+  const match = raw.match(/\{[\s\S]*?\}/);
+  if (!match) throw new Error("AI returned malformed collaboration suggestion");
+
+  return JSON.parse(match[0]);
+};
+
+// ─────────────────────────────────────────────────────────────
 // Exports
 // ─────────────────────────────────────────────────────────────
-module.exports = {
+export {
   generateBio,
   suggestSkills,
   generateIcebreaker,
   explainMatch,
+  generateProjectDescription,
+  suggestProjectTechStack,
+  generateProjectRoadmap,
+  syncGitHubData,
+  suggestCollaborationActivity,
+};
+
+export default {
+  generateBio,
+  suggestSkills,
+  generateIcebreaker,
+  explainMatch,
+  generateProjectDescription,
+  suggestProjectTechStack,
+  generateProjectRoadmap,
+  syncGitHubData,
+  suggestCollaborationActivity,
 };

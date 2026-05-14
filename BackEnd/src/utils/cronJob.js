@@ -1,18 +1,15 @@
-const cron = require("node-cron");
-const ConnectionRequest = require("../models/connectionRequest");
-const { subDays, startOfDay, endOfDay } = require("date-fns");
-const { run } = require("./sendEmail");
+import cron from "node-cron";
+import { subDays, startOfDay, endOfDay } from "date-fns";
+import ConnectionRequest from "../models/connectionRequest.js";
+import { run as sendEmail } from "./sendEmail.js";
+import logger from "./logger.js";
 
-// Runs every day at 10 AM
-cron.schedule(" 0 10 * * *", async () => {
+cron.schedule("0 10 * * *", async () => {
   try {
-    // Yesterday's range
     const yesterday = subDays(new Date(), 1);
     const yesterdayStart = startOfDay(yesterday);
     const yesterdayEnd = endOfDay(yesterday);
 
-
-    // Find all requests marked "interested" yesterday
     const pendingRequests = await ConnectionRequest.find({
       status: "interested",
       createdAt: {
@@ -21,52 +18,37 @@ cron.schedule(" 0 10 * * *", async () => {
       },
     }).populate("fromUserId toUserId");
 
-    // Collect unique recipient emails
     const listOfEmails = [
-      ...new Set(pendingRequests.map((req) => req.toUserId.emailId)),
+      ...new Set(pendingRequests.map((req) => req.toUserId?.emailId).filter(Boolean)),
     ];
+
     for (const email of listOfEmails) {
       try {
-        const subject = `You Have Pending Friend Requests – Don’t Miss Out!`;
-
-        // HTML structured body
+        const subject = "You Have Pending Friend Requests – Don’t Miss Out!";
         const body = `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-          <h2 style="color: #2c3e50;">Hi User, 👋</h2>
-
+          <h2 style="color: #2c3e50;">Hi Developer 👋</h2>
           <p>
-            You have <strong>pending friend requests</strong> waiting for you! 
-            Connect with your friends and expand your network today.
+            You have <strong>pending connection requests</strong> waiting for you!
+            Review them now to grow your DevTinder network.
           </p>
-
-          <p style="margin: 20px 0;">
-            ✅ <strong>Check your friend requests now</strong> and start engaging!
-          </p>
-
-          <a href="https://devs-tinder.site/requests" 
-             style="display: inline-block; padding: 12px 20px; background-color: #3498db; 
-                    color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          <a href="https://devs-tinder.site/requests"
+             style="display: inline-block; padding: 12px 20px; background-color: #3498db; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold;">
             View Requests
           </a>
-
-          <p style="margin-top: 30px;">
-            Don’t keep your friends waiting!
-          </p>
-
-          <p>
-            Best,<br/>
-            <strong>devs-tinder.site</strong>
-          </p>
+          <p style="margin-top: 30px;">Keep building great connections!</p>
+          <p>Best,<br/><strong>DevTinder Team</strong></p>
         </div>
         `;
 
-        const res = await run(subject, body, email);
-     
-      } catch (err) {
-       res.status(500).json({ message: "Error sending email to " + email, error: err.message });
+        await sendEmail(subject, body, email);
+      } catch (emailError) {
+        logger.error(`Cron email error for ${email}`, emailError);
       }
     }
-  } catch (err) {
-    res.status(500).json({ message: "Error processing cron job", error: err.message });
+  } catch (error) {
+    logger.error("Cron job processing failed", error);
   }
 });
+
+export default cron;

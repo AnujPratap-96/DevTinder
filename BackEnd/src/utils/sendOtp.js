@@ -1,10 +1,17 @@
-const SibApiV3Sdk = require('sib-api-v3-sdk');
-const { otpEmailTemplate, forgotPasswordTemplate } = require("./emailTemplates/templates");
+import SibApiV3Sdk from "sib-api-v3-sdk";
 
-const sendOtpEmail = async (toEmail, otp, purpose = "signup") => {
+import {
+  otpEmailTemplate,
+  forgotPasswordTemplate,
+  welcomeEmailTemplate,
+} from "./emailTemplates/templates.js";
+import config from "../config/env.js";
+import logger from "./logger.js";
+
+export const sendOtpEmail = async (toEmail, otp, purpose = "signup") => {
   try {
     const client = SibApiV3Sdk.ApiClient.instance;
-    client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+    client.authentications["api-key"].apiKey = config.email.brevoApiKey;
 
     const emailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
@@ -13,83 +20,68 @@ const sendOtpEmail = async (toEmail, otp, purpose = "signup") => {
       login: { subject: "Your DevTinder Login OTP" },
       "reset-password": { subject: "Your DevTinder Password Reset OTP" },
     };
-    
-    const config = purposeMap[purpose] || purposeMap.signup;
 
-    const htmlContent = otpEmailTemplate({ otp, purpose });
+    const template = purposeMap[purpose] || purposeMap.signup;
 
-    const emailPayload = {
+    await emailApi.sendTransacEmail({
       to: [{ email: toEmail }],
       sender: {
-        name: 'DevTinder',
-        email: 'no-reply@devs-tinder.site',
+        name: "DevTinder",
+        email: "no-reply@devs-tinder.site",
       },
-      subject: config.subject,
-      htmlContent,
-    };
-
-    await emailApi.sendTransacEmail(emailPayload);
-    
+      subject: template.subject,
+      htmlContent: otpEmailTemplate({ otp, purpose }),
+    });
   } catch (error) {
-    console.error("❌ Failed to send email:", error);
+    logger.error("Failed to send OTP email", error);
     throw new Error("Email send failed.");
   }
 };
 
-const sendForgotPasswordEmail = async (toEmail, resetLink) => {
+export const sendForgotPasswordEmail = async (toEmail, resetLink) => {
   try {
     const client = SibApiV3Sdk.ApiClient.instance;
-    client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+    client.authentications["api-key"].apiKey = config.email.brevoApiKey;
 
     const emailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
-    const htmlContent = forgotPasswordTemplate({ resetLink });
-
-    const emailPayload = {
+    await emailApi.sendTransacEmail({
       to: [{ email: toEmail }],
       sender: {
-        name: 'DevTinder',
-        email: 'no-reply@devs-tinder.site',
+        name: "DevTinder",
+        email: "no-reply@devs-tinder.site",
       },
       subject: "Reset Your DevTinder Password",
-      htmlContent,
-    };
-
-    await emailApi.sendTransacEmail(emailPayload);
-    
+      htmlContent: forgotPasswordTemplate({ resetLink }),
+    });
   } catch (error) {
-    console.error("❌ Failed to send email:", error);
+    logger.error("Failed to send password reset email", error);
     throw new Error("Email send failed.");
   }
 };
 
-const sendWelcomeEmail = async (toEmail, firstName) => {
-  const { welcomeEmailTemplate } = require("./emailTemplates/templates");
+export const sendWelcomeEmail = async (toEmail, firstName) => {
   try {
     const client = SibApiV3Sdk.ApiClient.instance;
-    client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+    client.authentications["api-key"].apiKey = config.email.brevoApiKey;
 
     const emailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-    const htmlContent = welcomeEmailTemplate({ firstName });
 
-    const emailPayload = {
+    await emailApi.sendTransacEmail({
       to: [{ email: toEmail }],
       sender: {
-        name: 'DevTinder',
-        email: 'no-reply@devs-tinder.site',
+        name: "DevTinder",
+        email: "no-reply@devs-tinder.site",
       },
       subject: "Welcome to DevTinder! 🎉",
-      htmlContent,
-    };
-
-    await emailApi.sendTransacEmail(emailPayload);
-    
+      htmlContent: welcomeEmailTemplate({ firstName }),
+    });
   } catch (error) {
-    console.error("❌ Failed to send welcome email:", error);
+    logger.warn("Failed to send welcome email", error);
   }
 };
 
-module.exports = {
+export default {
   sendOtpEmail,
   sendForgotPasswordEmail,
   sendWelcomeEmail,

@@ -1,41 +1,43 @@
-const cloudinary = require("cloudinary").v2;
-require("dotenv").config();
+import { v2 as cloudinary } from "cloudinary";
+import config from "../config/env.js";
+import logger from "./logger.js";
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET_KEY,
+  cloud_name: config.storage.cloudName,
+  api_key: config.storage.apiKey,
+  api_secret: config.storage.apiSecret,
 });
 
 const uploadImageCloudinary = async (image) => {
   try {
     const buffer = image.buffer;
-    const uploadImage = await new Promise((resolve, reject) => {
+    const uploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader
-        .upload_stream({ folder: "DevTinder" }, (error, uploadResult) => {
+        .upload_stream({ folder: "DevTinder" }, (error, result) => {
           if (error) {
             return reject(error);
           }
-          return resolve(uploadResult);
+          return resolve(result);
         })
         .end(buffer);
     });
 
-    if (!uploadImage) {
+    if (!uploadResult) {
       return {
         message: "Error uploading image",
         error: true,
         success: false,
       };
     }
-    return uploadImage;
+    return uploadResult;
   } catch (error) {
+    logger.error("Cloudinary upload failed", error);
     return {
-      message: error.message || error,
+      message: error.message || String(error),
       error: true,
       success: false,
     };
   }
 };
 
-module.exports = uploadImageCloudinary;
+export default uploadImageCloudinary;

@@ -1,28 +1,36 @@
-const jwt = require("jsonwebtoken");
+import jwt from "jsonwebtoken";
 
-const generateSignJWT = async (emailId) => {
-    const token = await jwt.sign({ emailId }, process.env.JWT_SECRET, {
-        expiresIn: "1h",
-    });
-    return token;
+import config from "../config/env.js";
+import { AppError } from "../errors/index.js";
+
+export const generateSignJWT = async (emailId) => {
+  const secret = config.signupJwt.secret || config.jwt.secret;
+  if (!secret) {
+    throw new Error("Signup JWT secret is not configured");
+  }
+  return jwt.sign({ emailId }, secret, {
+    expiresIn: config.signupJwt.expiresIn || "1h",
+  });
 };
 
-const verifySignJWT = async (req, res , next) => {
-    const token = req.cookies.signup_token;
-    if (!token) {
-        return res.status(401).json({ error: "Unauthorized" });
-    }
-    try {
-        const decoded = await jwt.verify(token, process.env.JWT_SECRET);
-        
-        req.emailId = decoded.emailId;
-        next();
-    } catch (error) {
-        return res.status(401).json({ error: "Unauthorized" });
-    }
-}
+export const verifySignJWT = async (req, res, next) => {
+  const token = req.cookies.signup_token;
+  if (!token) {
+    return next(new AppError({ message: "Unauthorized", statusCode: 401 }));
+  }
+  try {
+    const decoded = await jwt.verify(
+      token,
+      config.signupJwt.secret || config.jwt.secret
+    );
+    req.emailId = decoded.emailId;
+    next();
+  } catch (error) {
+    next(new AppError({ message: "Unauthorized", statusCode: 401, details: error.message }));
+  }
+};
 
-module.exports = {
-    generateSignJWT,
-    verifySignJWT
+export default {
+  generateSignJWT,
+  verifySignJWT,
 };

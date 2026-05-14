@@ -1,32 +1,29 @@
-const SibApiV3Sdk = require("sib-api-v3-sdk");
+import SibApiV3Sdk from "sib-api-v3-sdk";
+
+import config from "../config/env.js";
 
 const run = async (subject, body, toEmailId) => {
   try {
-    // Init Brevo client
     const client = SibApiV3Sdk.ApiClient.instance;
-    client.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
+    client.authentications["api-key"].apiKey = config.email.brevoApiKey;
 
     const emailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
-    // Build payload
     const emailPayload = {
       to: [{ email: toEmailId }],
       sender: {
         name: "DevTinder",
         email: "no-reply@devs-tinder.site",
       },
-      subject: subject,
-      htmlContent: `<h1>${body}</h1>`, // you can change this if you want
-      textContent: "This is the text format email", // fallback for clients that don't render HTML
+      subject,
+      htmlContent: body,
+      textContent: "This is the text format email",
     };
 
-    // Send email
-    const response = await emailApi.sendTransacEmail(emailPayload);
-    return response;
+    return emailApi.sendTransacEmail(emailPayload);
   } catch (error) {
-  
     throw new Error("Email send failed.");
   }
 };
 
-module.exports = { run };
+export { run };

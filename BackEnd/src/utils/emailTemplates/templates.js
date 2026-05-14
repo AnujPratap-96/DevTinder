@@ -1,16 +1,9 @@
-const {
-  APP_NAME,
-  APP_URL,
-  SUPPORT_EMAIL,
-  LOGO_URL,
-  PRIMARY_COLOR,
-  generateBaseTemplate,
-} = require("./baseTemplate");
+import { APP_NAME, APP_URL, PRIMARY_COLOR, generateBaseTemplate } from "./baseTemplate.js";
 
-const otpEmailTemplate = ({ otp, purpose }) => {
+export const otpEmailTemplate = ({ otp, purpose }) => {
   const isLogin = purpose === "login";
   const title = isLogin ? "Your Login OTP" : "Your Verification OTP";
-  
+
   const content = isLogin
     ? `<p>Your login verification code is below. This code will expire in 5 minutes.</p>`
     : `<p>Your account verification code is below. This code will expire in 5 minutes.</p>`;
@@ -46,7 +39,7 @@ const otpEmailTemplate = ({ otp, purpose }) => {
   });
 };
 
-const forgotPasswordTemplate = ({ resetLink }) => {
+export const forgotPasswordTemplate = ({ resetLink }) => {
   const title = "Reset Your Password";
   const content = `
     <p>You requested to reset your password. Click the button below to create a new password.</p>
@@ -61,7 +54,7 @@ const forgotPasswordTemplate = ({ resetLink }) => {
   });
 };
 
-const welcomeEmailTemplate = ({ firstName }) => {
+export const welcomeEmailTemplate = ({ firstName }) => {
   const title = `Welcome to ${APP_NAME}! 🎉`;
   const content = `
     <p>Hi <strong>${firstName}</strong>,</p>
@@ -84,7 +77,7 @@ const welcomeEmailTemplate = ({ firstName }) => {
   });
 };
 
-const connectionRequestTemplate = ({ senderName }) => {
+export const connectionRequestTemplate = ({ senderName }) => {
   const title = "New Connection Request";
   const content = `
     <p><strong>${senderName}</strong> wants to connect with you!</p>
@@ -99,7 +92,7 @@ const connectionRequestTemplate = ({ senderName }) => {
   });
 };
 
-const matchEmailTemplate = ({ matchName }) => {
+export const matchEmailTemplate = ({ matchName }) => {
   const title = "It's a Match! 💫";
   const content = `
     <p>You and <strong>${matchName}</strong> liked each other!</p>
@@ -114,7 +107,7 @@ const matchEmailTemplate = ({ matchName }) => {
   });
 };
 
-const projectInviteTemplate = ({ projectTitle, ownerName }) => {
+export const projectInviteTemplate = ({ projectTitle, ownerName }) => {
   const title = "Project Invitation";
   const content = `
     <p><strong>${ownerName}</strong> invited you to join their project: <strong>${projectTitle}</strong></p>
@@ -129,7 +122,7 @@ const projectInviteTemplate = ({ projectTitle, ownerName }) => {
   });
 };
 
-module.exports = {
+export default {
   otpEmailTemplate,
   forgotPasswordTemplate,
   welcomeEmailTemplate,

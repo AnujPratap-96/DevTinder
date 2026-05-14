@@ -1,36 +1,41 @@
-const socket = require("socket.io");
-const { Chat } = require("../models/chat");
-const { Message } = require("../models/message");
-const ConnectionRequest = require("../models/connectionRequest");
-const Notification = require("../models/notification");
-const User = require("../models/user");
+import { Server } from "socket.io";
+import Chat from "../models/chat.js";
+import Message from "../models/message.js";
+import ConnectionRequest from "../models/connectionRequest.js";
+import Notification from "../models/notification.js";
+import User from "../models/user.model.js";
+import config from "../config/env.js";
+import logger from "./logger.js";
 
-const activeUsers = new Map(); // userId -> Set<socketId>
-const offlineTimeouts = new Map(); // userId -> NodeJS.Timeout
-const rateTracker = new Map(); // userId -> number[] timestamps
+const activeUsers = new Map();
+const offlineTimeouts = new Map();
+const rateTracker = new Map();
 
 const RATE_LIMIT_WINDOW_MS = 2000;
 const RATE_LIMIT_MAX_MESSAGES = 8;
 const OFFLINE_DELAY_MS = 5000;
 
-const registerSocketForUser = (userId, socket) => {
+let ioInstance = null;
+
+const registerSocketForUser = (userId, socketInstance) => {
   if (!userId) return;
   const userKey = userId.toString();
-  
-  // Clear any pending offline marking
+
   if (offlineTimeouts.has(userKey)) {
     clearTimeout(offlineTimeouts.get(userKey));
     offlineTimeouts.delete(userKey);
   }
 
   const sockets = activeUsers.get(userKey) ?? new Set();
-  sockets.add(socket.id);
+  sockets.add(socketInstance.id);
   activeUsers.set(userKey, sockets);
 
   if (sockets.size === 1) {
-    User.findByIdAndUpdate(userKey, { $set: { isOnline: true } }).catch(() => {});
+    User.findByIdAndUpdate(userKey, { $set: { isOnline: true } }).catch((error) =>
+      logger.warn("Failed to mark user online", error)
+    );
   }
-  socket.data.userId = userKey;
+  socketInstance.data.userId = userKey;
 };
 
 const unregisterSocketForUser = (socketInstance) => {
@@ -38,23 +43,21 @@ const unregisterSocketForUser = (socketInstance) => {
   if (!userId) return;
   const sockets = activeUsers.get(userId);
   if (!sockets) return;
-  
+
   sockets.delete(socketInstance.id);
-  
+
   if (sockets.size === 0) {
-    // Start delay before marking offline
     const timeout = setTimeout(async () => {
-      // Re-verify after delay
       const currentSockets = activeUsers.get(userId);
       if (!currentSockets || currentSockets.size === 0) {
         activeUsers.delete(userId);
         offlineTimeouts.delete(userId);
         await User.findByIdAndUpdate(userId, {
           $set: { isOnline: false, lastSeenAt: new Date() },
-        }).catch(() => {});
+        }).catch((error) => logger.warn("Failed to mark user offline", error));
       }
     }, OFFLINE_DELAY_MS);
-    
+
     offlineTimeouts.set(userId, timeout);
   }
 };
@@ -104,7 +107,7 @@ const formatMessage = (doc) => ({
   metadata: doc.metadata ?? {},
 });
 
-const markMessagesDeliveredForUser = async ({ userId, socket, matchId }) => {
+const markMessagesDeliveredForUser = async ({ userId, socketInstance, matchId }) => {
   const query = { receiverId: userId, delivered: false };
   if (matchId) {
     query.matchId = matchId;
@@ -118,16 +121,17 @@ const markMessagesDeliveredForUser = async ({ userId, socket, matchId }) => {
     { $set: { delivered: true, deliveredAt: new Date() } }
   );
 
-  socket.emit("messages:delivered", pending.map(formatMessage));
+  socketInstance.emit("messages:delivered", pending.map(formatMessage));
 };
 
 const initializeSocket = (server) => {
-  const io = socket(server, {
+  const io = new Server(server, {
     cors: {
-      origin: "http://localhost:5173",
-      credentials: true,
+      origin: config.cors.origins,
+      credentials: config.cors.credentials,
     },
   });
+  ioInstance = io;
 
   io.on("connection", (socketInstance) => {
     socketInstance.on("session:register", async ({ userId }) => {
@@ -135,8 +139,8 @@ const initializeSocket = (server) => {
       registerSocketForUser(userId, socketInstance);
       await User.findByIdAndUpdate(userId, {
         $set: { isOnline: true },
-      }).catch(() => {});
-      await markMessagesDeliveredForUser({ userId, socket: socketInstance });
+      }).catch((error) => logger.warn("Failed to set user online", error));
+      await markMessagesDeliveredForUser({ userId, socketInstance });
     });
 
     socketInstance.on("joinChat", async ({ userId, targetUserId, matchId }) => {
@@ -162,7 +166,6 @@ const initializeSocket = (server) => {
         const roomId = chat.getRoomId();
         socketInstance.join(roomId);
 
-        // Reset unread count for this user
         const unreadResetKey = `unreadCounts.${userId}`;
         const updatedChat = await Chat.findByIdAndUpdate(
           chat._id,
@@ -178,7 +181,7 @@ const initializeSocket = (server) => {
 
         await markMessagesDeliveredForUser({
           userId,
-          socket: socketInstance,
+          socketInstance,
           matchId: chat._id,
         });
       } catch (error) {
@@ -238,13 +241,12 @@ const initializeSocket = (server) => {
             metadata,
           });
 
-          // Increment unread count for receiver
           const unreadIncKey = `unreadCounts.${receiverId}`;
           const updatedChat = await Chat.findByIdAndUpdate(
             chat._id,
-            { 
+            {
               $set: { lastMessageAt: new Date() },
-              $inc: { [unreadIncKey]: 1 }
+              $inc: { [unreadIncKey]: 1 },
             },
             { new: true }
           );
@@ -259,12 +261,11 @@ const initializeSocket = (server) => {
             );
             formatted.delivered = true;
             formatted.deliveredAt = new Date();
-            
-            // Emit unread update to receiver
-            receiverSockets.forEach(sid => {
+
+            receiverSockets.forEach((sid) => {
               io.to(sid).emit("unread:update", {
                 matchId: chat._id,
-                unreadCounts: updatedChat.unreadCounts
+                unreadCounts: updatedChat.unreadCounts,
               });
             });
           }
@@ -291,10 +292,9 @@ const initializeSocket = (server) => {
     socketInstance.on("message:seen", async ({ userId, matchId }) => {
       try {
         if (!userId || !matchId) return;
-        
+
         await Message.markAsSeen({ matchId, receiverId: userId });
-        
-        // Reset unread count on seen
+
         const unreadResetKey = `unreadCounts.${userId}`;
         const updatedChat = await Chat.findByIdAndUpdate(
           matchId,
@@ -305,7 +305,7 @@ const initializeSocket = (server) => {
         io.to(matchId.toString()).emit("messages:seen", { userId, matchId });
         socketInstance.emit("unread:update", {
           matchId,
-          unreadCounts: updatedChat.unreadCounts
+          unreadCounts: updatedChat.unreadCounts,
         });
       } catch (error) {
         socketInstance.emit("chat:error", { message: error.message });
@@ -328,4 +328,11 @@ const initializeSocket = (server) => {
   });
 };
 
-module.exports = { initializeSocket };
+const getIO = () => ioInstance;
+
+export { initializeSocket, getIO };
+
+export default {
+  initializeSocket,
+  getIO,
+};

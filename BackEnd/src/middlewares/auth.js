@@ -1,25 +1,46 @@
-const jwt = require("jsonwebtoken");
-const User = require("../models/user");
+import jwt from "jsonwebtoken";
 
-const userAuth = async (req, res, next) => {
+import config from "../config/env.js";
+import User from "../models/user.model.js";
+import { AppError } from "../errors/index.js";
+
+export const userAuth = async (req, res, next) => {
   const token = req.cookies.token;
 
   if (!token) {
-    return res.status(401).json({
-      ERROR: "Unauthorized",
-    });
+    return next(
+      new AppError({
+        message: "Authentication token missing",
+        statusCode: 401,
+        errorCode: "AUTH_TOKEN_MISSING",
+      })
+    );
   }
+
   try {
-    const decode = await jwt.verify(token, process.env.JWT_SECRET);
+    const decode = await jwt.verify(token, config.jwt.secret);
     const user = await User.findById(decode._id);
     if (!user) {
-      throw new Error("User not found");
+      throw new AppError({
+        message: "User not found",
+        statusCode: 401,
+        errorCode: "AUTH_USER_NOT_FOUND",
+      });
     }
     req.user = user;
     next();
-  } catch (err) {
-    res.status(400).json({ ERROR: "ERROR", message: err.message });
+  } catch (error) {
+    next(
+      error instanceof AppError
+        ? error
+        : new AppError({
+            message: "Authentication failed",
+            statusCode: 401,
+            errorCode: "AUTH_FAILED",
+            details: error.message,
+          })
+    );
   }
 };
 
-module.exports = { userAuth };
+export default userAuth;

@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema(
   {
@@ -80,4 +80,5 @@ messageSchema.statics.markAsSeen = function ({ matchId, receiverId }) {
 
 const Message = mongoose.model("Message", messageSchema);
 
-module.exports = { Message };
+export { Message };
+export default Message;

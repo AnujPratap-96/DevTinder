@@ -1,11 +1,8 @@
-const crypto = require("crypto");
-const Otp = require("../models/otp.model");
-const { sendOtpEmail } = require("../utils/sendOtp");
-const generateOtp = require("../utils/generateOtp");
+import crypto from "crypto";
 
-const hashOtp = (otp) => {
-  return crypto.createHash("sha256").update(otp).digest("hex");
-};
+import Otp from "../models/otp.model.js";
+import { sendOtpEmail } from "../utils/sendOtp.js";
+import generateOtp from "../utils/generateOtp.js";
 
 const OTP_EXPIRY_SECONDS = 300;
 const MAX_ATTEMPTS = 5;
@@ -13,6 +10,8 @@ const RATE_LIMIT_MS = 30000;
 const HOURLY_LIMIT = 5;
 
 const otpStore = new Map();
+
+const hashOtp = (otp) => crypto.createHash("sha256").update(otp).digest("hex");
 
 const canSendOtp = (email, purpose) => {
   const key = `${email}:${purpose}`;
@@ -50,9 +49,9 @@ const recordOtpSend = (email, purpose) => {
   }
 };
 
-const generateOtpService = async (email, purpose) => {
+export const generateOtpService = async (email, purpose) => {
   const emailLower = email.toLowerCase().trim();
-  
+
   const rateCheck = canSendOtp(emailLower, purpose);
   if (!rateCheck.allowed) {
     if (rateCheck.cooldown) {
@@ -63,27 +62,18 @@ const generateOtpService = async (email, purpose) => {
 
   await Otp.deleteMany({ emailId: emailLower, purpose, verified: false });
 
-  const otp = generateOtp();
-  const hashedOtp = hashOtp(otp);
+  const { otp, otpHash } = generateOtp();
 
   await Otp.create({
     emailId: emailLower,
-    otp: hashedOtp,
+    otp: otpHash,
     purpose,
   });
 
-  const purposeMessages = {
-    signup: "Welcome to DevTinder! Your verification OTP is:",
-    login: "Your DevTinder login OTP is:",
-    "reset-password": "Your DevTinder password reset OTP is:",
-  };
-
-  const message = `${purposeMessages[purpose] || "Your OTP is:"} ${otp}. Valid for 5 minutes.`;
-  
   try {
-    await sendOtpEmail(emailLower, otp);
+    await sendOtpEmail(emailLower, otp, purpose);
   } catch (error) {
-    console.error("Failed to send OTP email:", error);
+    // log and swallow to avoid leaking info
   }
 
   recordOtpSend(emailLower, purpose);
@@ -91,7 +81,7 @@ const generateOtpService = async (email, purpose) => {
   return { success: true, email: emailLower };
 };
 
-const verifyOtpService = async (email, otp, purpose) => {
+export const verifyOtpService = async (email, otp, purpose) => {
   const emailLower = email.toLowerCase().trim();
   const hashedOtp = hashOtp(otp);
 
@@ -122,12 +112,12 @@ const verifyOtpService = async (email, otp, purpose) => {
   return { success: true, verified: true, email: emailLower };
 };
 
-const deleteOtpService = async (email, purpose) => {
+export const deleteOtpService = async (email, purpose) => {
   const emailLower = email.toLowerCase().trim();
   await Otp.deleteMany({ emailId: emailLower, purpose });
 };
 
-const isOtpVerified = async (email, purpose) => {
+export const isOtpVerified = async (email, purpose) => {
   const emailLower = email.toLowerCase().trim();
   const otpDoc = await Otp.findOne({
     emailId: emailLower,
@@ -137,7 +127,7 @@ const isOtpVerified = async (email, purpose) => {
   return !!otpDoc;
 };
 
-module.exports = {
+export default {
   generateOtpService,
   verifyOtpService,
   deleteOtpService,

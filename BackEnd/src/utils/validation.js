@@ -1,8 +1,8 @@
-const validator = require("validator");
-const User = require("../models/user");
-const ConnectionRequest = require("../models/connectionRequest");
+import validator from "validator";
+import User from "../models/user.model.js"
+import ConnectionRequest from "../models/connectionRequest.js"
 
-const validateSignUpData = (req, res, next) => {
+export const validateSignUpData = (req, res, next) => {
   const { firstName, lastName,  password , age , gender } = req.body;
   const emailId = req.emailId;
   if (!firstName || !lastName || !emailId || !password || !age || !gender) {
@@ -30,7 +30,7 @@ const validateSignUpData = (req, res, next) => {
   next();
 };
 
-const validateEditProfileData = (req, res, next) => {
+export const validateEditProfileData = (req, res, next) => {
   const allowedEditFields = [
     "firstName",
     "lastName",
@@ -43,6 +43,7 @@ const validateEditProfileData = (req, res, next) => {
     "availability",
     "githubProfile",
     "socialLinks",
+    "theme",
   ];
   const isEditAllowed = Object.keys(req.body).every((field) =>
     allowedEditFields.includes(field)
@@ -91,7 +92,7 @@ const validateEditProfileData = (req, res, next) => {
   next();
 };
 
-const validateConnectionRequest = async (req, res, next) => {
+export const validateConnectionRequest = async (req, res, next) => {
   const fromUserId = req.user._id;
   const toUserId = req.params.touserId;
   const status = req.params.status;
@@ -99,8 +100,8 @@ const validateConnectionRequest = async (req, res, next) => {
   if (!allowedStatus.includes(status)) {
     return res.status(400).json({ message: "Invalid status", status: status });
   }
-  const UserExit = await User.findById(toUserId);
-  if (!UserExit) {
+  const userExists = await User.findById(toUserId);
+  if (!userExists) {
     return res.status(400).send("User not found");
   }
  
@@ -120,4 +121,8 @@ const validateConnectionRequest = async (req, res, next) => {
 
 };
 
-module.exports = { validateSignUpData, validateEditProfileData, validateConnectionRequest };
+export default {
+  validateSignUpData,
+  validateEditProfileData,
+  validateConnectionRequest,
+};

@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const projectMemberSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -56,6 +56,15 @@ const projectSchema = new mongoose.Schema(
       default: "open",
     },
     messages: [projectMessageSchema],
+    roadmap: {
+      type: [
+        {
+          title: { type: String, required: true },
+          tasks: { type: [String], default: [] },
+        },
+      ],
+      default: null,
+    },
   },
   { timestamps: true }
 );
@@ -90,4 +99,10 @@ projectSchema.methods.hasPendingRequest = function (userId) {
 
 const Project = mongoose.model("Project", projectSchema);
 
-module.exports = Project;
+export default Project;
+export {
+  projectSchema,
+  projectMemberSchema,
+  joinRequestSchema,
+  projectMessageSchema,
+};

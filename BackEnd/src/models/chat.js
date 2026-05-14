@@ -1,6 +1,6 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
-const buildMatchKey = (userIds = []) =>
+export const buildMatchKey = (userIds = []) =>
   userIds
     .map((id) => id.toString())
     .sort()
@@ -68,4 +68,5 @@ chatSchema.index({ lastMessageAt: -1 });
 
 const Chat = mongoose.model("Chat", chatSchema);
 
-module.exports = { Chat, buildMatchKey };
+export { Chat };
+export default Chat;

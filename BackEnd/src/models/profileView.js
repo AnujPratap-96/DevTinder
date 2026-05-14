@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const profileViewSchema = new mongoose.Schema(
   {
@@ -26,4 +26,5 @@ profileViewSchema.index({ viewedUserId: 1, viewedAt: -1 });
 
 const ProfileView = mongoose.model("ProfileView", profileViewSchema);
 
-module.exports = ProfileView;
+export default ProfileView;
+export { profileViewSchema };

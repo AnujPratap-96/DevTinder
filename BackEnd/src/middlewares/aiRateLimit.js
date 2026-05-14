@@ -5,7 +5,7 @@
  * Uses a sliding-window counter stored in a Map.
  */
 
-const MAX_REQUESTS = 10;      // max AI calls
+const MAX_REQUESTS = 10; // max AI calls
 const WINDOW_MS = 60 * 1000; // per 1 minute
 
 // Map<userId, { count: number, resetAt: number }>
@@ -50,4 +50,4 @@ const aiRateLimit = (req, res, next) => {
   return next();
 };
 
-module.exports = aiRateLimit;
+export default aiRateLimit;

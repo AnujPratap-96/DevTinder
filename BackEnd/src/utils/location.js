@@ -19,6 +19,4 @@ const haversineDistanceKm = (coord1, coord2) => {
   return R * c;
 };
 
-module.exports = {
-  haversineDistanceKm,
-};
+export { haversineDistanceKm };

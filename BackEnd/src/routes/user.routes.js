@@ -1,0 +1,22 @@
+import { Router } from "express";
+import { userAuth } from "../middlewares/auth.js";
+import {
+  getReceivedRequestsController,
+  getConnectionsController,
+  getFeedController,
+  getUsersController,
+  searchUsersController,
+  endorseUserController,
+} from "../controllers/user.controller.js";
+
+const router = Router();
+
+router.get("/user/requests/received", userAuth, getReceivedRequestsController);
+router.get("/user/connections", userAuth, getConnectionsController);
+router.get("/user/feed", userAuth, getFeedController);
+router.get("/feed", userAuth, getFeedController);
+router.get("/users", userAuth, getUsersController);
+router.get("/search", userAuth, searchUsersController);
+router.post("/user/endorse", userAuth, endorseUserController);
+
+export default router;

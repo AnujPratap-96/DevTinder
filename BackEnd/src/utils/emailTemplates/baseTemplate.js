@@ -99,7 +99,7 @@ const generateBaseTemplate = ({ title, content, ctaText, ctaLink }) => {
   `.trim();
 };
 
-module.exports = {
+export {
   APP_NAME,
   APP_URL,
   SUPPORT_EMAIL,
