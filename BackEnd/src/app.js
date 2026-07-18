@@ -13,10 +13,17 @@ import "./utils/cronJob.js";
 
 const app = express();
 
+app.use(
+  cors({
+    origin: config.cors.origins,
+    credentials: config.cors.credentials,
+  })
+);
+
 // Global Rate Limiting - protect against DoS
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: 1000, // Limit each IP to 1000 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: "Too many requests, please try again later." },
@@ -29,12 +36,6 @@ app.use(express.json({ limit: config.request?.jsonLimit || "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(mongoSanitize());
 app.use(cookieParser());
-app.use(
-  cors({
-    origin: config.cors.origins,
-    credentials: config.cors.credentials,
-  })
-);
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
