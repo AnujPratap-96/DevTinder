@@ -29,7 +29,11 @@ const config = {
     uri: process.env.MONGO_URI,
   },
   cors: {
-    origins: toArray(process.env.CORS_ORIGINS) || ["http://localhost:5173"],
+    origins: [
+      ...(toArray(process.env.CORS_ORIGINS) || []),
+      "http://localhost:5173",
+      "https://dev-tinder-frontend-six-virid.vercel.app",
+    ],
     credentials: true,
   },
   jwt: {
