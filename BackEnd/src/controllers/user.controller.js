@@ -7,6 +7,8 @@ import {
   getUsersWithFilters,
   searchUsers,
   endorseConnection,
+  savePublicKey,
+  getPublicKey,
 } from "../services/user.service.js";
 
 export const getReceivedRequestsController = asyncHandler(async (req, res) => {
@@ -58,5 +60,23 @@ export const endorseUserController = asyncHandler(async (req, res) => {
   return successResponse(res, {
     message: `You endorsed ${targetUser?.firstName ?? targetUserId} for ${skill}`,
     data: endorsements,
+  });
+});
+
+export const savePublicKeyController = asyncHandler(async (req, res) => {
+  const { publicKey, keyVersion } = req.body;
+  const result = await savePublicKey({ userId: req.user._id, publicKey, keyVersion });
+  return successResponse(res, {
+    message: "Encryption key saved",
+    data: result,
+  });
+});
+
+export const getPublicKeyController = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const result = await getPublicKey({ userId });
+  return successResponse(res, {
+    message: "Public key fetched",
+    data: result,
   });
 });

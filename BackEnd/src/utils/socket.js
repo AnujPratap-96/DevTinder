@@ -2,8 +2,8 @@ import { Server } from "socket.io";
 import Chat from "../models/chat.js";
 import Message from "../models/message.js";
 import ConnectionRequest from "../models/connectionRequest.js";
-import Notification from "../models/notification.js";
 import User from "../models/user.model.js";
+import { createNotification, formatNotification } from "../repositories/notification.repository.js";
 import config from "../config/env.js";
 import logger from "./logger.js";
 
@@ -98,6 +98,7 @@ const formatMessage = (doc) => ({
   clientMessageId: doc.clientMessageId,
   message: doc.message,
   messageType: doc.messageType,
+  isEncrypted: doc.isEncrypted ?? false,
   delivered: doc.delivered,
   seen: doc.seen,
   deliveredAt: doc.deliveredAt,
@@ -191,7 +192,7 @@ const initializeSocket = (server) => {
 
     socketInstance.on(
       "sendMessage",
-      async ({ userId, targetUserId, matchId, message, messageType = "text", clientMessageId, metadata = {} }) => {
+      async ({ userId, targetUserId, matchId, message, messageType = "text", clientMessageId, isEncrypted = true, metadata = {} }) => {
         try {
           if (!userId) throw new Error("userId is required");
           if (!clientMessageId) throw new Error("clientMessageId is required");
@@ -237,6 +238,7 @@ const initializeSocket = (server) => {
             receiverId,
             message: message.trim(),
             messageType,
+            isEncrypted: Boolean(isEncrypted),
             clientMessageId,
             metadata,
           });
@@ -270,16 +272,15 @@ const initializeSocket = (server) => {
             });
           }
 
-          await Notification.create({
+          const notificationDoc = await createNotification({
             userId: receiverId,
             type: "message.new",
-            payload: {
-              matchId: chat._id,
-              senderId: userId,
-              message: formatted.message,
-              clientMessageId,
-            },
+            // Deliberately omit the message body: it is end-to-end encrypted and
+            // the server must never persist plaintext. No internal ids are sent
+            // either — the client shows a generic "New message" preview.
+            payload: {},
           });
+          emitToUser(receiverId, "notification:new", formatNotification(notificationDoc));
 
           io.to(chat.getRoomId()).emit("message:created", formatted);
           socketInstance.emit("message:ack", formatted);
@@ -330,9 +331,26 @@ const initializeSocket = (server) => {
 
 const getIO = () => ioInstance;
 
-export { initializeSocket, getIO };
+/**
+ * Emit an event to every connected socket for a given user.
+ * Uses the in-memory activeUsers registry (socket ids per user).
+ * Returns true if at least one socket received the event.
+ */
+const emitToUser = (userId, event, payload) => {
+  if (!ioInstance || !userId) return false;
+  const userKey = userId.toString();
+  const sockets = activeUsers.get(userKey);
+  if (!sockets || sockets.size === 0) return false;
+  sockets.forEach((socketId) => {
+    ioInstance.to(socketId).emit(event, payload);
+  });
+  return true;
+};
+
+export { initializeSocket, getIO, emitToUser };
 
 export default {
   initializeSocket,
   getIO,
+  emitToUser,
 };

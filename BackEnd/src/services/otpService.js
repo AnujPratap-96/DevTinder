@@ -3,6 +3,7 @@ import crypto from "crypto";
 import Otp from "../models/otp.model.js";
 import { sendOtpEmail } from "../utils/sendOtp.js";
 import generateOtp from "../utils/generateOtp.js";
+import logger from "../utils/logger.js";
 
 const OTP_EXPIRY_SECONDS = 300;
 const MAX_ATTEMPTS = 5;
@@ -73,7 +74,7 @@ export const generateOtpService = async (email, purpose) => {
   try {
     await sendOtpEmail(emailLower, otp, purpose);
   } catch (error) {
-    // log and swallow to avoid leaking info
+    logger.error("Failed to send OTP email", { email: emailLower, purpose });
   }
 
   recordOtpSend(emailLower, purpose);

@@ -65,6 +65,16 @@ const userSchema = new mongoose.Schema(
         }
       },
     },
+    // End-to-end encryption: the user's public key (SPKI, base64). The private
+    // key never leaves the client. Null until the client generates a keypair.
+    publicKey: {
+      type: String,
+      default: null,
+    },
+    keyVersion: {
+      type: Number,
+      default: 0,
+    },
     about: {
       type: String,
       default: "This is a default about the user",

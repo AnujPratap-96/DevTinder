@@ -1,4 +1,4 @@
-import { createNotification } from "../repositories/notification.repository.js";
+import { createNotificationAndNotify } from "../utils/notify.js";
 import {
   createConnectionRequest,
   findConnectionRequest,
@@ -44,13 +44,11 @@ export const sendConnectionRequest = async ({ fromUser, toUserId, status }) => {
     status,
   });
 
-  await createNotification({
+  await createNotificationAndNotify({
     userId: toUser._id,
     type: "connection.request",
     payload: {
-      fromUserId: fromUser._id,
-      requestId: request._id,
-      status,
+      fromUserName: `${fromUser.firstName} ${fromUser.lastName ?? ""}`.trim(),
     },
   });
 
@@ -75,13 +73,11 @@ export const reviewConnectionRequest = async ({ requestId, status, reviewer }) =
   request.status = status;
   const updated = await request.save();
 
-  await createNotification({
+  await createNotificationAndNotify({
     userId: request.fromUserId,
     type: "connection.response",
     payload: {
-      toUserId: reviewer._id,
       status,
-      requestId,
     },
   });
 

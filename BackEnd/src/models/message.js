@@ -29,6 +29,13 @@ const messageSchema = new mongoose.Schema(
       trim: true,
       required: true,
     },
+    // When true the `message` field holds base64(iv|ciphertext) produced
+    // client-side; the server never sees plaintext. Legacy/redacted rows are
+    // false so clients know not to attempt decryption.
+    isEncrypted: {
+      type: Boolean,
+      default: true,
+    },
     messageType: {
       type: String,
       enum: ["text", "image", "file"],

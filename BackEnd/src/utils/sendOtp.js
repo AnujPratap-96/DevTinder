@@ -27,7 +27,7 @@ export const sendOtpEmail = async (toEmail, otp, purpose = "signup") => {
       to: [{ email: toEmail }],
       sender: {
         name: "DevTinder",
-        email: "no-reply@devs-tinder.site",
+        email: "officialthakur94@gmail.com",
       },
       subject: template.subject,
       htmlContent: otpEmailTemplate({ otp, purpose }),
@@ -49,7 +49,7 @@ export const sendForgotPasswordEmail = async (toEmail, resetLink) => {
       to: [{ email: toEmail }],
       sender: {
         name: "DevTinder",
-        email: "no-reply@devs-tinder.site",
+        email: "officialthakur94@gmail.com",
       },
       subject: "Reset Your DevTinder Password",
       htmlContent: forgotPasswordTemplate({ resetLink }),
@@ -71,7 +71,7 @@ export const sendWelcomeEmail = async (toEmail, firstName) => {
       to: [{ email: toEmail }],
       sender: {
         name: "DevTinder",
-        email: "no-reply@devs-tinder.site",
+        email: "officialthakur94@gmail.com",
       },
       subject: "Welcome to DevTinder! 🎉",
       htmlContent: welcomeEmailTemplate({ firstName }),

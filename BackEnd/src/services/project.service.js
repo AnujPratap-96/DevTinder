@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 import Project from "../models/project.js";
-import Notification from "../models/notification.js";
+import { createNotificationAndNotify } from "../utils/notify.js";
 import { AppError, ValidationError } from "../errors/index.js";
 
 const getMemberUserId = (member) => (typeof member === "object" ? member?.userId : member);
@@ -90,13 +90,11 @@ export const requestProjectJoin = async ({ projectId, userId }) => {
   project.joinRequests.push({ userId, status: "pending" });
   await project.save();
 
-  await Notification.create({
+  await createNotificationAndNotify({
     userId: project.ownerId,
     type: "project.join_request",
     payload: {
-      projectId: project._id,
       projectTitle: project.title,
-      requesterId: userId,
     },
   });
 
@@ -164,20 +162,18 @@ export const respondToProjectRequest = async ({ projectId, requestId, action, us
 
   if (action === "accept") {
     project.members.push({ userId: request.userId, role: "member" });
-    await Notification.create({
+    await createNotificationAndNotify({
       userId: request.userId,
       type: "project.request_accepted",
       payload: {
-        projectId: project._id,
-               projectTitle: project.title,
+        projectTitle: project.title,
       },
     });
   } else {
-    await Notification.create({
+    await createNotificationAndNotify({
       userId: request.userId,
       type: "project.request_rejected",
       payload: {
-        projectId: project._id,
         projectTitle: project.title,
       },
     });
@@ -225,7 +221,7 @@ export const removeProjectMember = async ({ projectId, memberId, userId }) => {
   project.members.splice(memberIndex, 1);
   await project.save();
 
-  await Notification.create({
+  await createNotificationAndNotify({
     userId: member.userId,
     type: "project.member_removed",
     payload: {
@@ -302,7 +298,7 @@ export const addProjectMessage = async ({ projectId, userId, message, mentions }
     project.members
       .filter((member) => member.userId.toString() !== userId.toString())
       .map((member) =>
-        Notification.create({
+        createNotificationAndNotify({
           userId: member.userId,
           type: "project.message",
           payload: {

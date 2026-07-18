@@ -7,6 +7,8 @@ import {
   getUsersController,
   searchUsersController,
   endorseUserController,
+  savePublicKeyController,
+  getPublicKeyController,
 } from "../controllers/user.controller.js";
 
 const router = Router();
@@ -18,5 +20,7 @@ router.get("/feed", userAuth, getFeedController);
 router.get("/users", userAuth, getUsersController);
 router.get("/search", userAuth, searchUsersController);
 router.post("/user/endorse", userAuth, endorseUserController);
+router.post("/user/public-key", userAuth, savePublicKeyController);
+router.get("/user/public-key/:userId", userAuth, getPublicKeyController);
 
 export default router;
