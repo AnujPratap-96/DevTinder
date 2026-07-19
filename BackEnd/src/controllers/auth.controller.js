@@ -38,7 +38,7 @@ export const registerController = asyncHandler(async (req, res) => {
     expires: new Date(Date.now() + 60 * 60000),
     httpOnly: true,
     secure: config.isProduction,
-    sameSite: "strict",
+    sameSite: config.isProduction ? "none" : "lax",
   });
 
   return successResponse(res, { message: "OTP sent to your email!", data: { token } });
@@ -60,7 +60,7 @@ export const completeSignupController = asyncHandler(async (req, res) => {
     expires: new Date(Date.now() + 8 * 3600000),
     httpOnly: true,
     secure: config.isProduction,
-    sameSite: "strict",
+    sameSite: config.isProduction ? "none" : "lax",
   });
   res.clearCookie("signup_token");
 
@@ -75,7 +75,7 @@ export const loginController = asyncHandler(async (req, res) => {
     expires: new Date(Date.now() + 8 * 3600000),
     httpOnly: true,
     secure: config.isProduction,
-    sameSite: "strict",
+    sameSite: config.isProduction ? "none" : "lax",
   });
 
   return successResponse(res, { message: "User Logged In Successfully", data: { user } });
@@ -89,7 +89,7 @@ export const oauthLoginController = asyncHandler(async (req, res) => {
     expires: new Date(Date.now() + 8 * 3600000),
     httpOnly: true,
     secure: config.isProduction,
-    sameSite: "strict",
+    sameSite: config.isProduction ? "none" : "lax",
   });
 
   return successResponse(res, { message: "OAuth login successful", data: { user } });
@@ -101,7 +101,7 @@ export const logoutController = asyncHandler(async (req, res) => {
     expires: new Date(0),
     httpOnly: true,
     secure: config.isProduction,
-    sameSite: "strict",
+    sameSite: config.isProduction ? "none" : "lax",
   });
   return successResponse(res, { message: "User Logged Out Successfully" });
 });
