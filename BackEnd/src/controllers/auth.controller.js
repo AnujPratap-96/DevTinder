@@ -12,6 +12,15 @@ import {
   logout,
 } from "../services/auth.service.js";
 
+const secureCookieFlags = (req) => {
+  const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https";
+  return {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? "none" : "lax",
+  };
+};
+
 export const sendOtpController = asyncHandler(async (req, res) => {
   const { email, purpose } = req.body ?? {};
   await sendOtp({ email, purpose });
@@ -36,9 +45,7 @@ export const registerController = asyncHandler(async (req, res) => {
 
   res.cookie("signup_token", token, {
     expires: new Date(Date.now() + 60 * 60000),
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: config.isProduction ? "none" : "lax",
+    ...secureCookieFlags(req),
   });
 
   return successResponse(res, { message: "OTP sent to your email!", data: { token } });
@@ -58,9 +65,7 @@ export const completeSignupController = asyncHandler(async (req, res) => {
 
   res.cookie("token", token, {
     expires: new Date(Date.now() + 8 * 3600000),
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: config.isProduction ? "none" : "lax",
+    ...secureCookieFlags(req),
   });
   res.clearCookie("signup_token");
 
@@ -73,9 +78,7 @@ export const loginController = asyncHandler(async (req, res) => {
 
   res.cookie("token", token, {
     expires: new Date(Date.now() + 8 * 3600000),
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: config.isProduction ? "none" : "lax",
+    ...secureCookieFlags(req),
   });
 
   return successResponse(res, { message: "User Logged In Successfully", data: { user } });
@@ -87,9 +90,7 @@ export const oauthLoginController = asyncHandler(async (req, res) => {
 
   res.cookie("token", token, {
     expires: new Date(Date.now() + 8 * 3600000),
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: config.isProduction ? "none" : "lax",
+    ...secureCookieFlags(req),
   });
 
   return successResponse(res, { message: "OAuth login successful", data: { user } });
@@ -99,9 +100,7 @@ export const logoutController = asyncHandler(async (req, res) => {
   await logout(req.user?._id);
   res.cookie("token", "", {
     expires: new Date(0),
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: config.isProduction ? "none" : "lax",
+    ...secureCookieFlags(req),
   });
   return successResponse(res, { message: "User Logged Out Successfully" });
 });
