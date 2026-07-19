@@ -13,10 +13,11 @@ import {
   projectSuggestionsController,
 } from "../controllers/ai.controller.js";
 import { userAuth } from "../middlewares/auth.js";
-import aiRateLimit from "../middlewares/aiRateLimit.js";
+import { requireMinimumPlan } from "../middlewares/requirePlan.js";
+import { aiDailyLimit } from "../middlewares/planLimits.js";
 
 const router = Router();
-const guard = [userAuth, aiRateLimit];
+const guard = [userAuth, requireMinimumPlan("silver"), aiDailyLimit];
 
 router.post("/ai/collaboration-activity", ...guard, collaborationActivityController);
 router.post("/ai/bio", ...guard, generateBioController);

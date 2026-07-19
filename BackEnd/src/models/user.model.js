@@ -50,11 +50,22 @@ const userSchema = new mongoose.Schema(
     },
     membershipType: {
       type: String,
-      enum: {
-        values: ["free", "silver", "gold"],
-        message: "{VALUE} is not supported",
-      },
       default: "free",
+      trim: true,
+      lowercase: true,
+    },
+    membershipExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Plan",
+      default: null,
+    },
+    usage: {
+      connectionRequests: { count: { type: Number, default: 0 }, date: { type: String, default: "" } },
+      aiCalls: { count: { type: Number, default: 0 }, date: { type: String, default: "" } },
     },
     photoUrl: {
       type: [String],
@@ -143,6 +154,10 @@ const userSchema = new mongoose.Schema(
     isBanned: {
       type: Boolean,
       default: false,
+    },
+    bannedAt: {
+      type: Date,
+      default: null,
     },
     blockedUsers: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],

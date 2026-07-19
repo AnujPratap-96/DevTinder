@@ -1,7 +1,7 @@
 import Payment from "../models/payment.js";
 import User from "../models/user.model.js";
+import Plan from "../models/plan.js";
 import config from "../config/env.js";
-import membershipAmount from "../utils/constants.js";
 import razorpayInstance from "../utils/razorpay.js";
 import { AppError, ValidationError } from "../errors/index.js";
 import { validateWebhookSignature } from "razorpay/dist/utils/razorpay-utils.js";
@@ -11,20 +11,24 @@ export const createPaymentOrder = async ({ user, membershipType }) => {
     throw new ValidationError("Membership Type is required");
   }
 
-  const amount = membershipAmount[membershipType];
-  if (!amount) {
-    throw new ValidationError("Invalid membership type");
+  const slug = String(membershipType).toLowerCase();
+  const plan = await Plan.findOne({ slug, isActive: true });
+  if (!plan) {
+    throw new ValidationError("Invalid or inactive membership plan");
+  }
+  if (plan.isFree) {
+    throw new ValidationError("This plan does not require payment");
   }
 
   const order = await razorpayInstance.orders.create({
-    amount: amount * 100,
-    currency: "INR",
+    amount: plan.price * 100,
+    currency: plan.currency || "INR",
     receipt: `order_${Date.now()}`,
     notes: {
       firstName: user.firstName,
       lastName: user.lastName,
       emailId: user.emailId,
-      membershipType,
+      membershipType: slug,
     },
   });
 
@@ -67,8 +71,18 @@ export const handleWebhook = async ({ signature, body }) => {
   if (payment.status === "captured") {
     const user = await User.findById(payment.userId);
     if (user) {
-      user.isPremium = true;
-      user.membershipType = payment.notes.membershipType;
+      const slug = payment.notes?.membershipType;
+      const plan = slug ? await Plan.findOne({ slug }) : null;
+      user.membershipType = slug || "free";
+      user.planId = plan?._id ?? null;
+      user.isPremium = Boolean(plan && !plan.isFree);
+      if (plan && plan.durationMonths > 0) {
+        user.membershipExpiresAt = new Date(
+          Date.now() + plan.durationMonths * 30 * 24 * 60 * 60 * 1000
+        );
+      } else {
+        user.membershipExpiresAt = null;
+      }
       await user.save();
     }
   }

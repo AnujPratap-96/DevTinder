@@ -4,6 +4,7 @@ import Message from "../models/message.js";
 import ConnectionRequest from "../models/connectionRequest.js";
 import User from "../models/user.model.js";
 import { createNotification, formatNotification } from "../repositories/notification.repository.js";
+import { getPlanBySlug } from "./planConfig.js";
 import config from "../config/env.js";
 import logger from "./logger.js";
 
@@ -194,11 +195,20 @@ const initializeSocket = (server) => {
       "sendMessage",
       async ({ userId, targetUserId, matchId, message, messageType = "text", clientMessageId, isEncrypted = true, metadata = {} }) => {
         try {
-          if (!userId) throw new Error("userId is required");
-          if (!clientMessageId) throw new Error("clientMessageId is required");
-          if (!message?.trim()) throw new Error("message is required");
+        if (!userId) throw new Error("userId is required");
+        if (!clientMessageId) throw new Error("clientMessageId is required");
+        if (!message?.trim()) throw new Error("message is required");
 
-          registerSocketForUser(userId, socketInstance);
+        const sender = await User.findById(userId).select("membershipType").lean();
+        const senderPlan = await getPlanBySlug(sender?.membershipType || "free");
+        if (!senderPlan?.limits?.canChat) {
+          socketInstance.emit("chat:error", {
+            message: "Your plan does not include chat. Upgrade to Silver or Gold to message connections.",
+          });
+          return;
+        }
+
+        registerSocketForUser(userId, socketInstance);
 
           if (isRateLimited(userId.toString())) {
             socketInstance.emit("chat:error", { message: "You are sending messages too fast" });

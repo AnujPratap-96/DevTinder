@@ -27,6 +27,19 @@ export const userAuth = async (req, res, next) => {
         errorCode: "AUTH_USER_NOT_FOUND",
       });
     }
+
+    // Apply plan expiry in-memory: an expired paid plan reverts to "free"
+    // for the lifetime of this request. A cron job persists the revert.
+    if (
+      user.membershipType &&
+      user.membershipType !== "free" &&
+      user.membershipExpiresAt &&
+      user.membershipExpiresAt < new Date()
+    ) {
+      user.membershipType = "free";
+      user.isPremium = false;
+    }
+
     req.user = user;
     next();
   } catch (error) {

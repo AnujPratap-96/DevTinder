@@ -3,6 +3,7 @@ import app from "./app.js";
 import config from "./config/env.js";
 import { connectDB } from "./config/database.js";
 import { initializeSocket } from "./utils/socket.js";
+import { seedDefaultPlans } from "./services/plan.service.js";
 import logger from "./utils/logger.js";
 import User from "./models/user.model.js";
 
@@ -28,6 +29,7 @@ const resetStaleOnlineUsers = async () => {
 const startServer = async () => {
   try {
     await connectDB();
+    await seedDefaultPlans();
     await resetStaleOnlineUsers();
     const server = http.createServer(app);
     initializeSocket(server);

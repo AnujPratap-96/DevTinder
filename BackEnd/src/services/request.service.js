@@ -6,6 +6,8 @@ import {
 import { findUserById } from "../repositories/user.repository.js";
 import { AppError, ValidationError } from "../errors/index.js";
 import { getIO } from "../utils/socket.js";
+import { getPlanBySlug } from "../utils/planConfig.js";
+import { checkDailyUsage } from "../utils/usage.js";
 
 const ALLOWED_SEND_STATUS = ["ignored", "interested"];
 const ALLOWED_REVIEW_STATUS = ["accepted", "rejected"];
@@ -13,6 +15,19 @@ const ALLOWED_REVIEW_STATUS = ["accepted", "rejected"];
 export const sendConnectionRequest = async ({ fromUser, toUserId, status }) => {
   if (!ALLOWED_SEND_STATUS.includes(status)) {
     throw new ValidationError("Invalid status");
+  }
+
+  const plan = await getPlanBySlug(fromUser.membershipType || "free");
+  const limit = plan?.limits?.connectionRequestsPerDay;
+  if (limit !== null && limit !== undefined) {
+    const { allowed } = await checkDailyUsage(fromUser, "connectionRequests", limit);
+    if (!allowed) {
+      throw new AppError({
+        message: `Daily connection request limit (${limit}) reached. Try tomorrow or upgrade your plan.`,
+        statusCode: 429,
+        errorCode: "REQUEST_LIMIT_REACHED",
+      });
+    }
   }
 
   const toUser = await findUserById(toUserId);

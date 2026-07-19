@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { subDays, startOfDay, endOfDay } from "date-fns";
 import ConnectionRequest from "../models/connectionRequest.js";
+import User from "../models/user.model.js";
 import { run as sendEmail } from "./sendEmail.js";
 import logger from "./logger.js";
 
@@ -48,6 +49,31 @@ cron.schedule("0 10 * * *", async () => {
     }
   } catch (error) {
     logger.error("Cron job processing failed", error);
+  }
+});
+
+// Revert expired paid plans back to "free" (runs nightly).
+cron.schedule("30 0 * * *", async () => {
+  try {
+    const result = await User.updateMany(
+      {
+        membershipType: { $ne: "free" },
+        membershipExpiresAt: { $ne: null, $lt: new Date() },
+      },
+      {
+        $set: {
+          membershipType: "free",
+          isPremium: false,
+          planId: null,
+          membershipExpiresAt: null,
+        },
+      }
+    );
+    if (result.modifiedCount > 0) {
+      logger.info(`Reverted ${result.modifiedCount} expired plan(s) to free`);
+    }
+  } catch (error) {
+    logger.error("Plan expiry sweep failed", error);
   }
 });
 

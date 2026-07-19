@@ -13,6 +13,7 @@ import bookmarkRouter from "./bookmark.routes.js";
 import githubRouter from "./github.routes.js";
 import adminRouter from "./admin.routes.js";
 import aiRouter from "./ai.routes.js";
+import planRouter from "./plan.routes.js";
 
 const router = Router();
 
@@ -29,5 +30,6 @@ router.use("/", bookmarkRouter);
 router.use("/", githubRouter);
 router.use("/", adminRouter);
 router.use("/", aiRouter);
+router.use("/plans", planRouter);
 
 export default router;
