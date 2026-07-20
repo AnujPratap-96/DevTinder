@@ -5,7 +5,7 @@ import ConnectionRequest from "../models/connectionRequest.js";
 import User from "../models/user.model.js";
 import { createNotification, formatNotification } from "../repositories/notification.repository.js";
 import { getPlanBySlug } from "./planConfig.js";
-import initializeCallSocket from "./call.socket.js";
+import initializeCallSocket from "../sockets/call.socket.js";
 import config from "../config/env.js";
 import logger from "./logger.js";
 
