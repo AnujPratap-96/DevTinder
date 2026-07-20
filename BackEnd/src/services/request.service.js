@@ -19,7 +19,7 @@ export const sendConnectionRequest = async ({ fromUser, toUserId, status }) => {
 
   const plan = await getPlanBySlug(fromUser.membershipType || "free");
   const limit = plan?.limits?.connectionRequestsPerDay;
-  if (limit !== null && limit !== undefined) {
+  if (limit !== null && limit !== undefined && !fromUser.isAdmin) {
     const { allowed } = await checkDailyUsage(fromUser, "connectionRequests", limit);
     if (!allowed) {
       throw new AppError({

@@ -7,6 +7,7 @@ import { checkDailyUsage } from "../utils/usage.js";
  */
 export const aiDailyLimit = async (req, res, next) => {
   try {
+    if (req.user?.isAdmin) return next();
     const plan = await getPlanBySlug(req.user?.membershipType || "free");
     const limit = plan?.limits?.aiCallsPerDay ?? 0;
 

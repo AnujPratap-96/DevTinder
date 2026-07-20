@@ -25,7 +25,15 @@ export const listBookmarks = async (userId) => {
     .lean();
 };
 
+export const removeBookmark = async ({ userId, savedUserId }) => {
+  if (!savedUserId || !mongoose.isValidObjectId(savedUserId)) {
+    throw new ValidationError("Valid userId is required");
+  }
+  return Bookmark.findOneAndDelete({ userId, savedUserId });
+};
+
 export default {
   upsertBookmark,
   listBookmarks,
+  removeBookmark,
 };

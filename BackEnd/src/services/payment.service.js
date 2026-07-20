@@ -45,6 +45,24 @@ export const createPaymentOrder = async ({ user, membershipType }) => {
   return { payment, keyId: config.payment.razorpayKeyId };
 };
 
+const applyMembership = async (userId, slug) => {
+  const user = await User.findById(userId);
+  if (!user) return null;
+  const plan = slug ? await Plan.findOne({ slug }) : null;
+  user.membershipType = slug || "free";
+  user.planId = plan?._id ?? null;
+  user.isPremium = Boolean(plan && !plan.isFree);
+  if (plan && plan.durationMonths > 0) {
+    user.membershipExpiresAt = new Date(
+      Date.now() + plan.durationMonths * 30 * 24 * 60 * 60 * 1000
+    );
+  } else {
+    user.membershipExpiresAt = null;
+  }
+  await user.save();
+  return user;
+};
+
 export const handleWebhook = async ({ signature, body }) => {
   const rawBody = Buffer.isBuffer(body) ? body.toString() : JSON.stringify(body);
 
@@ -59,35 +77,32 @@ export const handleWebhook = async ({ signature, body }) => {
   }
 
   const payload = Buffer.isBuffer(body) ? JSON.parse(body.toString()) : body;
-  const paymentDetails = payload.payload.payment.entity;
-  const payment = await Payment.findOne({ orderId: paymentDetails.order_id });
+  const event = payload?.event;
+  const paymentEntity = payload?.payload?.payment?.entity;
+  if (!paymentEntity) {
+    // Non-payment event (e.g. refund, dispute) — acknowledge so Razorpay stops retrying.
+    console.log(`[webhook] Ignored non-payment event: ${event}`);
+    return { status: "ignored", event };
+  }
+
+  const payment = await Payment.findOne({ orderId: paymentEntity.order_id });
   if (!payment) {
     throw new AppError({ message: "Payment record not found", statusCode: 404 });
   }
 
-  payment.status = paymentDetails.status;
+  payment.status = paymentEntity.status;
   await payment.save();
 
   if (payment.status === "captured") {
-    const user = await User.findById(payment.userId);
-    if (user) {
-      const slug = payment.notes?.membershipType;
-      const plan = slug ? await Plan.findOne({ slug }) : null;
-      user.membershipType = slug || "free";
-      user.planId = plan?._id ?? null;
-      user.isPremium = Boolean(plan && !plan.isFree);
-      if (plan && plan.durationMonths > 0) {
-        user.membershipExpiresAt = new Date(
-          Date.now() + plan.durationMonths * 30 * 24 * 60 * 60 * 1000
-        );
-      } else {
-        user.membershipExpiresAt = null;
-      }
-      await user.save();
-    }
+    const updated = await applyMembership(payment.userId, payment.notes?.membershipType);
+    console.log(
+      `[webhook] Activated membership="${updated?.membershipType}" for user=${payment.userId} (event=${event})`
+    );
+  } else {
+    console.log(`[webhook] Payment status=${payment.status} (not captured) for user=${payment.userId}`);
   }
 
-  return { status: payment.status };
+  return { status: payment.status, event };
 };
 
 export const verifyPremium = (user) => ({

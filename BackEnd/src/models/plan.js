@@ -38,7 +38,6 @@ const planSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-planSchema.index({ slug: 1 });
 planSchema.index({ order: 1 });
 
 const Plan = mongoose.model("Plan", planSchema);
