@@ -30,6 +30,8 @@ export const getCall = (callId) => activeByCallId.get(callId) || null;
 
 export const isUserInCall = (userId) => callIdByUser.has(userId.toString());
 
+export const getActiveCallIdForUser = (userId) => callIdByUser.get(userId.toString()) || null;
+
 export const markAccepted = (callId) => {
   const entry = activeByCallId.get(callId);
   if (entry) entry.status = "accepted";

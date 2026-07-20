@@ -8,6 +8,20 @@ import logger from "../utils/logger.js";
 
 const inviteTimeouts = new Map(); // callId -> setTimeout handle
 
+// Anti-spam limit on placing calls.
+const INVITE_RATE_WINDOW_MS = 30000;
+const INVITE_RATE_MAX = 10;
+const inviteTimestamps = new Map(); // userId -> number[]
+
+const isInviteRateLimited = (userId) => {
+  const now = Date.now();
+  const arr = inviteTimestamps.get(userId) ?? [];
+  const recent = arr.filter((t) => now - t < INVITE_RATE_WINDOW_MS);
+  recent.push(now);
+  inviteTimestamps.set(userId, recent);
+  return recent.length > INVITE_RATE_MAX;
+};
+
 const clearInviteTimeout = (callId) => {
   const t = inviteTimeouts.get(callId);
   if (t) {
@@ -52,6 +66,14 @@ export const initializeCallSocket = (io) => {
         if (!calleeId) throw new Error("calleeId is required");
 
         await ensureConnection(userId, calleeId);
+
+        if (isInviteRateLimited(userId)) {
+          socket.emit("call:error", {
+            message: "Too many call attempts. Please wait a moment.",
+            code: "RATE_LIMITED",
+          });
+          return;
+        }
 
         const caller = await User.findById(userId).select("firstName lastName photoUrl membershipType").lean();
         const plan = await getPlanBySlug(caller?.membershipType || "free");
@@ -170,6 +192,21 @@ export const initializeCallSocket = (io) => {
         emitToUser(otherParty(call, userId), "call:end", { callId, reason });
       } catch (err) {
         socket.emit("call:error", { message: err.message });
+      }
+    });
+
+    // If a user disconnects mid-call, free them in the call registry and
+    // notify the other party so neither side stays stuck "in a call".
+    socket.on("disconnect", () => {
+      const userId = socket.data.userId;
+      if (!userId) return;
+      const callId = callManager.getActiveCallIdForUser(userId);
+      if (!callId) return;
+      const call = callManager.getCall(callId);
+      callManager.removeCall(callId);
+      if (call) {
+        const other = call.callerId === userId.toString() ? call.calleeId : call.callerId;
+        emitToUser(other, "call:end", { callId, reason: "disconnected" });
       }
     });
   });
