@@ -65,7 +65,10 @@ export const initializeCallSocket = (io) => {
         if (!["voice", "video"].includes(type)) throw new Error("Invalid call type");
         if (!calleeId) throw new Error("calleeId is required");
 
+        logger.info("[call] invite from=%s to=%s type=%s calleeOnline=%s", userId, calleeId, type, activeUsers.has(calleeId.toString()));
+
         await ensureConnection(userId, calleeId);
+        logger.info("[call] connection OK from=%s to=%s", userId, calleeId);
 
         if (isInviteRateLimited(userId)) {
           socket.emit("call:error", {
@@ -78,6 +81,7 @@ export const initializeCallSocket = (io) => {
         const caller = await User.findById(userId).select("firstName lastName photoUrl membershipType").lean();
         const plan = await getPlanBySlug(caller?.membershipType || "free");
         const allowed = type === "video" ? plan?.limits?.canVideoCall : plan?.limits?.canCall;
+        logger.info("[call] plan=%s allowed=%s", caller?.membershipType, allowed);
         if (!allowed) {
           socket.emit("call:error", {
             message: `Your plan does not include ${type} calls. Upgrade to enable calling.`,
@@ -113,6 +117,7 @@ export const initializeCallSocket = (io) => {
           },
           chatId: session.chatId,
         });
+        logger.info("[call] invite emitted to callee=%s callId=%s", calleeId, session.callId);
 
         socket.emit("call:created", {
           callId: session.callId,
@@ -122,6 +127,7 @@ export const initializeCallSocket = (io) => {
 
         scheduleMissed(session.callId);
       } catch (err) {
+        logger.warn("[call] invite failed from=%s to=%s err=%s", userId, calleeId, err.message);
         socket.emit("call:error", { message: err.message, code: err.errorCode });
       }
     });
