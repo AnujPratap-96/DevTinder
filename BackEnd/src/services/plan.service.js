@@ -90,10 +90,13 @@ const DEFAULT_PLANS = [
 
 export const seedDefaultPlans = async () => {
   for (const plan of DEFAULT_PLANS) {
-    await Plan.findOneAndUpdate({ slug: plan.slug }, plan, {
-      upsert: true,
-      setDefaultsOnInsert: true,
-    });
+    // Only create plans that don't exist yet. $setOnInsert ensures we never
+    // overwrite admin edits (price, features, limits, etc.) on restart/deploy.
+    await Plan.findOneAndUpdate(
+      { slug: plan.slug },
+      { $setOnInsert: plan },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
   }
 };
 

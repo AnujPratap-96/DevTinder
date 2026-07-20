@@ -9,8 +9,16 @@ export const aiDailyLimit = async (req, res, next) => {
   try {
     if (req.user?.isAdmin) return next();
     const plan = await getPlanBySlug(req.user?.membershipType || "free");
-    const limit = plan?.limits?.aiCallsPerDay ?? 0;
+    if (!plan) {
+      return res.status(403).json({
+        success: false,
+        message: "Plan not found. Please contact support.",
+        error: "PLAN_REQUIRED",
+      });
+    }
 
+    // `null`/`undefined` means unlimited (e.g. Gold). Must check BEFORE coercing.
+    const limit = plan.limits.aiCallsPerDay;
     if (limit === null || limit === undefined) return next();
 
     const { allowed } = await checkDailyUsage(req.user, "aiCalls", limit);
