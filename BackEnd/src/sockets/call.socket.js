@@ -41,10 +41,12 @@ const otherParty = (call, userId) =>
 
 export const initializeCallSocket = (io) => {
   io.on("connection", (socket) => {
-    const userId = socket.data.userId;
-    if (!userId) return;
-
     socket.on("call:invite", async ({ calleeId, type = "voice", chatId } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) {
+        socket.emit("call:error", { message: "Not authenticated", code: "UNAUTHENTICATED" });
+        return;
+      }
       try {
         if (!["voice", "video"].includes(type)) throw new Error("Invalid call type");
         if (!calleeId) throw new Error("calleeId is required");
@@ -103,6 +105,8 @@ export const initializeCallSocket = (io) => {
     });
 
     socket.on("call:accept", async ({ callId } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
       try {
         const call = callManager.getCall(callId);
         if (!call || call.calleeId !== userId.toString()) {
@@ -118,6 +122,8 @@ export const initializeCallSocket = (io) => {
     });
 
     socket.on("call:decline", async ({ callId } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
       try {
         const call = callManager.getCall(callId);
         if (!call || call.calleeId !== userId.toString()) return;
@@ -130,24 +136,32 @@ export const initializeCallSocket = (io) => {
     });
 
     socket.on("call:offer", ({ callId, sdp } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
       const call = callManager.getCall(callId);
       if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
       emitToUser(otherParty(call, userId), "call:offer", { callId, sdp });
     });
 
     socket.on("call:answer", ({ callId, sdp } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
       const call = callManager.getCall(callId);
       if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
       emitToUser(otherParty(call, userId), "call:answer", { callId, sdp });
     });
 
     socket.on("call:ice-candidate", ({ callId, candidate } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
       const call = callManager.getCall(callId);
       if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
       emitToUser(otherParty(call, userId), "call:ice-candidate", { callId, candidate });
     });
 
     socket.on("call:end", async ({ callId, reason = "hangup" } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
       try {
         const call = callManager.getCall(callId);
         if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
