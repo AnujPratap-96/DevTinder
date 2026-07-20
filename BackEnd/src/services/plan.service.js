@@ -96,12 +96,25 @@ const DEFAULT_PLANS = [
 
 export const seedDefaultPlans = async () => {
   for (const plan of DEFAULT_PLANS) {
-    // Only create plans that don't exist yet. $setOnInsert ensures we never
-    // overwrite admin edits (price, features, limits, etc.) on restart/deploy.
+    // Create plans that don't exist yet. $setOnInsert ensures we never
+    // overwrite admin edits (price, features, etc.) on restart/deploy.
     await Plan.findOneAndUpdate(
       { slug: plan.slug },
       { $setOnInsert: plan },
       { upsert: true, setDefaultsOnInsert: true }
+    );
+    // Always keep the call limits in sync with the code defaults so the
+    // feature works even for plans seeded before these fields existed.
+    // Other admin-editable fields (price, features) are left untouched.
+    await Plan.updateOne(
+      { slug: plan.slug },
+      {
+        $set: {
+          "limits.canCall": plan.limits.canCall,
+          "limits.canVideoCall": plan.limits.canVideoCall,
+          "limits.canChat": plan.limits.canChat,
+        },
+      }
     );
   }
 };

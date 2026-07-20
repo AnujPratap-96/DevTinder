@@ -1,5 +1,5 @@
 import { emitToUser, ensureConnection, activeUsers } from "../utils/socket.js";
-import { getPlanBySlug } from "../utils/planConfig.js";
+import { getPlanLimits } from "../utils/planConfig.js";
 import User from "../models/user.model.js";
 import * as callService from "../services/call.service.js";
 import * as callManager from "../services/callManager.js";
@@ -68,7 +68,6 @@ export const initializeCallSocket = (io) => {
         logger.info("[call] invite from=%s to=%s type=%s calleeOnline=%s", userId, calleeId, type, activeUsers.has(calleeId.toString()));
 
         await ensureConnection(userId, calleeId);
-        logger.info("[call] connection OK from=%s to=%s", userId, calleeId);
 
         if (isInviteRateLimited(userId)) {
           socket.emit("call:error", {
@@ -79,9 +78,8 @@ export const initializeCallSocket = (io) => {
         }
 
         const caller = await User.findById(userId).select("firstName lastName photoUrl membershipType").lean();
-        const plan = await getPlanBySlug(caller?.membershipType || "free");
-        const allowed = type === "video" ? plan?.limits?.canVideoCall : plan?.limits?.canCall;
-        logger.info("[call] plan=%s allowed=%s", caller?.membershipType, allowed);
+        const planLimits = await getPlanLimits(caller?.membershipType || "free");
+        const allowed = type === "video" ? planLimits.canVideoCall : planLimits.canCall;
         if (!allowed) {
           socket.emit("call:error", {
             message: `Your plan does not include ${type} calls. Upgrade to enable calling.`,
@@ -106,8 +104,6 @@ export const initializeCallSocket = (io) => {
           chatId,
         });
 
-        const calleeSockets = activeUsers.get(calleeId.toString());
-        logger.info("[call] callee socket ids=%o", Array.from(calleeSockets ?? []));
         const delivered = emitToUser(calleeId, "call:invite", {
           callId: session.callId,
           type: session.type,
