@@ -106,7 +106,9 @@ export const initializeCallSocket = (io) => {
           chatId,
         });
 
-        emitToUser(calleeId, "call:invite", {
+        const calleeSockets = activeUsers.get(calleeId.toString());
+        logger.info("[call] callee socket ids=%o", Array.from(calleeSockets ?? []));
+        const delivered = emitToUser(calleeId, "call:invite", {
           callId: session.callId,
           type: session.type,
           caller: {
@@ -117,7 +119,7 @@ export const initializeCallSocket = (io) => {
           },
           chatId: session.chatId,
         });
-        logger.info("[call] invite emitted to callee=%s callId=%s", calleeId, session.callId);
+        logger.info("[call] invite emitted to callee=%s callId=%s delivered=%s", calleeId, session.callId, delivered);
 
         socket.emit("call:created", {
           callId: session.callId,
