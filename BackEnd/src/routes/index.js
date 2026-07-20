@@ -14,6 +14,7 @@ import githubRouter from "./github.routes.js";
 import adminRouter from "./admin.routes.js";
 import aiRouter from "./ai.routes.js";
 import planRouter from "./plan.routes.js";
+import callRouter from "./call.routes.js";
 
 const router = Router();
 
@@ -31,5 +32,6 @@ router.use("/", githubRouter);
 router.use("/", adminRouter);
 router.use("/", aiRouter);
 router.use("/plans", planRouter);
+router.use("/calls", callRouter);
 
 export default router;

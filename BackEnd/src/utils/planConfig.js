@@ -31,6 +31,8 @@ const FALLBACK_LIMITS = {
   aiCallsPerDay: 0,
   canCreateProjects: false,
   canChat: false,
+  canCall: false,
+  canVideoCall: false,
   canViewProfileViews: false,
   blueBadge: false,
   themeAccess: false,

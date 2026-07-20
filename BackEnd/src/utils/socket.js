@@ -5,6 +5,7 @@ import ConnectionRequest from "../models/connectionRequest.js";
 import User from "../models/user.model.js";
 import { createNotification, formatNotification } from "../repositories/notification.repository.js";
 import { getPlanBySlug } from "./planConfig.js";
+import initializeCallSocket from "./call.socket.js";
 import config from "../config/env.js";
 import logger from "./logger.js";
 
@@ -134,6 +135,8 @@ const initializeSocket = (server) => {
     },
   });
   ioInstance = io;
+
+  initializeCallSocket(io);
 
   io.on("connection", (socketInstance) => {
     socketInstance.on("session:register", async ({ userId }) => {
@@ -357,10 +360,12 @@ const emitToUser = (userId, event, payload) => {
   return true;
 };
 
-export { initializeSocket, getIO, emitToUser };
+export { initializeSocket, getIO, emitToUser, ensureConnection, activeUsers };
 
 export default {
   initializeSocket,
   getIO,
   emitToUser,
+  ensureConnection,
+  activeUsers,
 };
