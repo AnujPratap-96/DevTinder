@@ -1,4 +1,4 @@
-import { getPlanBySlug } from "./planConfig.js";
+import { getPlanLimits } from "./planConfig.js";
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
 
@@ -31,6 +31,6 @@ export const checkDailyUsage = async (user, key, limit) => {
 };
 
 export const getDailyLimitFor = async (user, key) => {
-  const plan = await getPlanBySlug(user?.membershipType || "free");
-  return plan?.limits?.[key] ?? 0;
+  const planLimits = await getPlanLimits(user?.membershipType || "free");
+  return planLimits?.[key] ?? 0;
 };

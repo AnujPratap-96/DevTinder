@@ -6,7 +6,7 @@ import {
 import { findUserById } from "../repositories/user.repository.js";
 import { AppError, ValidationError } from "../errors/index.js";
 import { getIO } from "../utils/socket.js";
-import { getPlanBySlug } from "../utils/planConfig.js";
+import { getPlanLimits } from "../utils/planConfig.js";
 import { checkDailyUsage } from "../utils/usage.js";
 
 const ALLOWED_SEND_STATUS = ["ignored", "interested"];
@@ -17,8 +17,8 @@ export const sendConnectionRequest = async ({ fromUser, toUserId, status }) => {
     throw new ValidationError("Invalid status");
   }
 
-  const plan = await getPlanBySlug(fromUser.membershipType || "free");
-  const limit = plan?.limits?.connectionRequestsPerDay;
+  const planLimits = await getPlanLimits(fromUser.membershipType || "free");
+  const limit = planLimits.connectionRequestsPerDay;
   if (limit !== null && limit !== undefined && !fromUser.isAdmin) {
     const { allowed } = await checkDailyUsage(fromUser, "connectionRequests", limit);
     if (!allowed) {

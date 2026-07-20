@@ -4,7 +4,7 @@ import Message from "../models/message.js";
 import ConnectionRequest from "../models/connectionRequest.js";
 import User from "../models/user.model.js";
 import { createNotification, formatNotification } from "../repositories/notification.repository.js";
-import { getPlanBySlug } from "./planConfig.js";
+import { getPlanLimits } from "./planConfig.js";
 import initializeCallSocket from "../sockets/call.socket.js";
 import config from "../config/env.js";
 import logger from "./logger.js";
@@ -203,8 +203,8 @@ const initializeSocket = (server) => {
         if (!message?.trim()) throw new Error("message is required");
 
         const sender = await User.findById(userId).select("membershipType").lean();
-        const senderPlan = await getPlanBySlug(sender?.membershipType || "free");
-        if (!senderPlan?.limits?.canChat) {
+        const senderPlan = await getPlanLimits(sender?.membershipType || "free");
+        if (!senderPlan?.canChat) {
           socketInstance.emit("chat:error", {
             message: "Your plan does not include chat. Upgrade to Silver or Gold to message connections.",
           });

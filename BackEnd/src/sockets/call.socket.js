@@ -65,8 +65,6 @@ export const initializeCallSocket = (io) => {
         if (!["voice", "video"].includes(type)) throw new Error("Invalid call type");
         if (!calleeId) throw new Error("calleeId is required");
 
-        logger.info("[call] invite from=%s to=%s type=%s calleeOnline=%s", userId, calleeId, type, activeUsers.has(calleeId.toString()));
-
         await ensureConnection(userId, calleeId);
 
         if (isInviteRateLimited(userId)) {
@@ -115,8 +113,6 @@ export const initializeCallSocket = (io) => {
           },
           chatId: session.chatId,
         });
-        logger.info("[call] invite emitted to callee=%s callId=%s delivered=%s", calleeId, session.callId, delivered);
-
         socket.emit("call:created", {
           callId: session.callId,
           type: session.type,

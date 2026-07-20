@@ -38,10 +38,49 @@ const FALLBACK_LIMITS = {
   themeAccess: false,
 };
 
+// Canonical limits per slug, defined in code so plan-gating works even when a
+// DB plan is missing these fields (e.g. plans seeded before limits existed).
+// DB plan.limits always wins over these defaults (admin edits are respected).
+const DEFAULT_LIMITS_BY_SLUG = {
+  free: {
+    connectionRequestsPerDay: 10,
+    aiCallsPerDay: 0,
+    canCreateProjects: false,
+    canChat: false,
+    canCall: false,
+    canVideoCall: false,
+    canViewProfileViews: false,
+    blueBadge: false,
+    themeAccess: false,
+  },
+  silver: {
+    connectionRequestsPerDay: 100,
+    aiCallsPerDay: 20,
+    canCreateProjects: true,
+    canChat: true,
+    canCall: true,
+    canVideoCall: false,
+    canViewProfileViews: true,
+    blueBadge: true,
+    themeAccess: false,
+  },
+  gold: {
+    connectionRequestsPerDay: 500,
+    aiCallsPerDay: null,
+    canCreateProjects: true,
+    canChat: true,
+    canCall: true,
+    canVideoCall: true,
+    canViewProfileViews: true,
+    blueBadge: true,
+    themeAccess: true,
+  },
+};
+
 export const getPlanLimits = async (slug) => {
   const plan = await getPlanBySlug(slug);
-  if (!plan) return FALLBACK_LIMITS;
-  return { ...FALLBACK_LIMITS, ...plan.limits };
+  const base = DEFAULT_LIMITS_BY_SLUG[slug] || FALLBACK_LIMITS;
+  return { ...FALLBACK_LIMITS, ...base, ...(plan?.limits || {}) };
 };
 
 export const invalidatePlanCache = () => cache.clear();
