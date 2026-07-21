@@ -1,5 +1,4 @@
 import cron from "node-cron";
-import { subDays, startOfDay, endOfDay } from "date-fns";
 import ConnectionRequest from "../models/connectionRequest.js";
 import User from "../models/user.model.js";
 import { run as sendEmail } from "./sendEmail.js";
@@ -7,16 +6,8 @@ import logger from "./logger.js";
 
 export const runDailyReminders = async () => {
   try {
-    const yesterday = subDays(new Date(), 1);
-    const yesterdayStart = startOfDay(yesterday);
-    const yesterdayEnd = endOfDay(yesterday);
-
     const pendingRequests = await ConnectionRequest.find({
       status: "interested",
-      createdAt: {
-        $gte: yesterdayStart,
-        $lt: yesterdayEnd,
-      },
     }).populate("fromUserId toUserId");
 
     const listOfEmails = [
