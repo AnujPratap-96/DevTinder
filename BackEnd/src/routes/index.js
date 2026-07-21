@@ -14,9 +14,11 @@ import githubRouter from "./github.routes.js";
 import adminRouter from "./admin.routes.js";
 import aiRouter from "./ai.routes.js";
 import planRouter from "./plan.routes.js";
+import cronRouter from "./cron.routes.js";
 
 const router = Router();
 
+router.use("/", cronRouter);
 router.use("/", authRouter);
 router.use("/", requestRouter);
 router.use("/", profileRouter);

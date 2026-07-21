@@ -5,7 +5,7 @@ import User from "../models/user.model.js";
 import { run as sendEmail } from "./sendEmail.js";
 import logger from "./logger.js";
 
-cron.schedule("0 10 * * *", async () => {
+export const runDailyReminders = async () => {
   try {
     const yesterday = subDays(new Date(), 1);
     const yesterdayStart = startOfDay(yesterday);
@@ -50,10 +50,9 @@ cron.schedule("0 10 * * *", async () => {
   } catch (error) {
     logger.error("Cron job processing failed", error);
   }
-});
+};
 
-// Revert expired paid plans back to "free" (runs nightly).
-cron.schedule("30 0 * * *", async () => {
+export const runPlanExpirySweep = async () => {
   try {
     const result = await User.updateMany(
       {
@@ -75,6 +74,9 @@ cron.schedule("30 0 * * *", async () => {
   } catch (error) {
     logger.error("Plan expiry sweep failed", error);
   }
-});
+};
+
+cron.schedule("0 10 * * *", runDailyReminders);
+cron.schedule("30 0 * * *", runPlanExpirySweep);
 
 export default cron;
