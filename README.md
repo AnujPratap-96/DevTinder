@@ -3,7 +3,7 @@
 DevTinder is a **MERN stack-based** platform where developers can **connect 🤝, chat 💬, and network 🌍** with each other. The platform also includes a **payment system powered by Razorpay 💳**. The project is **deployed on AWS ☁️** with **Nginx as a reverse proxy 🔀**.
 
 ## 🌐 Live Demo
-🔗 [Visit DevTinder](https://devs-tinder.site)
+🔗 [Visit DevTinder](https://dev-tinder-frontend-six-virid.vercel.app)
 
 ## 🛠️ Tech Stack
 
