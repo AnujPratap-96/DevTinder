@@ -1,6 +1,6 @@
 const APP_NAME = "DevTinder";
 const APP_URL = "https://devtinder.online";
-const SUPPORT_EMAIL = "support@devs-tinder.site";
+const SUPPORT_EMAIL = "support@dev-tinder-frontend-six-virid.vercel.app";
 const LOGO_URL = "https://devtinder.online/logo.png";
 
 const PRIMARY_COLOR = "#6366f1";

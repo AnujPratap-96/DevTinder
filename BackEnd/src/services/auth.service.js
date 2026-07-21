@@ -158,7 +158,7 @@ export const completeSignup = async ({
         <h2 style="color: #6366f1;">Welcome to DevTinder, ${firstName}! 🎉</h2>
         <p>We are absolutely thrilled to have you onboard.</p>
         <p>DevTinder helps you connect with developers worldwide, showcase your tech stack, and build together.</p>
-        <a href="${config.github.appUrl || "https://devs-tinder.site/"}" style="display: inline-block; padding: 12px 24px; background-color: #6366f1; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 15px;">Explore Developers</a>
+        <a href="${config.github.appUrl || "https://dev-tinder-frontend-six-virid.vercel.app/"}" style="display: inline-block; padding: 12px 24px; background-color: #6366f1; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 15px;">Explore Developers</a>
         <p style="margin-top: 40px; font-size: 14px; color: #888;">
           Happy coding,<br/>
           <strong>The DevTinder Team</strong>

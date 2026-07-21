@@ -24,7 +24,7 @@ export const runDailyReminders = async () => {
             You have <strong>pending connection requests</strong> waiting for you!
             Review them now to grow your DevTinder network.
           </p>
-          <a href="https://devs-tinder.site/requests"
+          <a href="https://dev-tinder-frontend-six-virid.vercel.app/requests"
              style="display: inline-block; padding: 12px 20px; background-color: #3498db; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold;">
             View Requests
           </a>
