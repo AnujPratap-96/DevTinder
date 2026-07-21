@@ -20,6 +20,7 @@ import inviteRouter from "./invite.routes.js";
 
 const router = Router();
 
+router.use("/", cronRouter);
 router.use("/", authRouter);
 router.use("/", requestRouter);
 router.use("/", profileRouter);
@@ -33,7 +34,6 @@ router.use("/", bookmarkRouter);
 router.use("/", githubRouter);
 router.use("/", adminRouter);
 router.use("/", aiRouter);
-router.use("/", cronRouter);
 router.use("/", inviteRouter);
 router.use("/plans", planRouter);
 router.use("/calls", callRouter);

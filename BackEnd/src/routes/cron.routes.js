@@ -5,10 +5,12 @@ import logger from "../utils/logger.js";
 
 const router = express.Router();
 
+const MIN_RUN_INTERVAL_MS = 12 * 60 * 60 * 1000;
+
 router.post("/cron/daily-reminders", async (req, res) => {
-  const allowed = await CronState.ensureRun("daily-reminders");
+  const allowed = await CronState.ensureRun("daily-reminders", MIN_RUN_INTERVAL_MS);
   if (!allowed) {
-    return res.json({ ok: true, skipped: true, reason: "Already ran today" });
+    return res.json({ ok: true, skipped: true, reason: "Already ran within 12 hours" });
   }
   logger.info("Cron trigger: daily-reminders");
   await runDailyReminders();
@@ -16,9 +18,9 @@ router.post("/cron/daily-reminders", async (req, res) => {
 });
 
 router.post("/cron/plan-expiry", async (req, res) => {
-  const allowed = await CronState.ensureRun("plan-expiry");
+  const allowed = await CronState.ensureRun("plan-expiry", MIN_RUN_INTERVAL_MS);
   if (!allowed) {
-    return res.json({ ok: true, skipped: true, reason: "Already ran today" });
+    return res.json({ ok: true, skipped: true, reason: "Already ran within 12 hours" });
   }
   logger.info("Cron trigger: plan-expiry");
   await runPlanExpirySweep();

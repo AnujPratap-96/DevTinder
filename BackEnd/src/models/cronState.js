@@ -5,11 +5,10 @@ const cronStateSchema = new mongoose.Schema({
   lastRunAt: { type: Date },
 });
 
-cronStateSchema.statics.ensureRun = async function (jobName) {
+cronStateSchema.statics.ensureRun = async function (jobName, intervalMs) {
   const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const record = await this.findOne({ job: jobName });
-  if (record && record.lastRunAt >= todayStart) {
+  if (record && now.getTime() - record.lastRunAt.getTime() < intervalMs) {
     return false;
   }
   await this.updateOne(
