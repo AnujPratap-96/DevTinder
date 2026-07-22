@@ -323,6 +323,11 @@ const initializeSocket = (server) => {
       }
     });
 
+    socketInstance.on("message:delete", ({ messageId, matchId }) => {
+      if (!messageId || !matchId) return;
+      socketInstance.to(matchId.toString()).emit("message:deleted", { messageId, matchId });
+    });
+
     socketInstance.on("typing:start", ({ matchId, userId }) => {
       if (!matchId || !userId) return;
       socketInstance.to(matchId.toString()).emit("typing:start", { matchId, userId });

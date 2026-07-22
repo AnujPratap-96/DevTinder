@@ -95,8 +95,27 @@ export const markMessagesSeenService = async ({ matchId, userId }) => {
   return { updated: result.modifiedCount ?? result.nModified ?? 0 };
 };
 
+export const deleteMessageService = async ({ messageId, userId }) => {
+  if (!messageId) {
+    throw new ValidationError("messageId is required");
+  }
+
+  const message = await Message.findById(messageId);
+  if (!message) {
+    throw new NotFoundError("Message");
+  }
+
+  if (message.senderId.toString() !== userId.toString()) {
+    throw new AppError({ message: "You can only delete your own messages", statusCode: 403 });
+  }
+
+  await Message.findByIdAndDelete(messageId);
+  return message;
+};
+
 export default {
   getChatWithUser,
   listChatMessages,
   markMessagesSeenService,
+  deleteMessageService,
 };
