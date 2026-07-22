@@ -4,6 +4,7 @@ import {
   getChatController,
   listMessagesController,
   markMessagesSeenController,
+  deleteMessageController,
 } from "../controllers/chat.controller.js";
 import { userAuth } from "../middlewares/auth.js";
 import { requireMinimumPlan } from "../middlewares/requirePlan.js";
@@ -14,5 +15,6 @@ const planGuard = [userAuth, requireMinimumPlan("silver")];
 router.get("/chat/:targetUserId", ...planGuard, getChatController);
 router.get("/messages/:matchId", ...planGuard, listMessagesController);
 router.patch("/messages/seen", ...planGuard, markMessagesSeenController);
+router.delete("/messages/:messageId", ...planGuard, deleteMessageController);
 
 export default router;
