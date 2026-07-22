@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import ConnectionRequest from "../models/connectionRequest.js";
 import User from "../models/user.model.js";
+import CronState from "../models/cronState.js";
 import { run as sendEmail } from "./sendEmail.js";
 import logger from "./logger.js";
 
@@ -67,7 +68,15 @@ export const runPlanExpirySweep = async () => {
   }
 };
 
-cron.schedule("0 10 * * *", runDailyReminders);
-cron.schedule("30 0 * * *", runPlanExpirySweep);
+cron.schedule("0 10 * * *", async () => {
+  if (await CronState.ensureRun("daily-reminders")) {
+    await runDailyReminders();
+  }
+});
+cron.schedule("30 0 * * *", async () => {
+  if (await CronState.ensureRun("plan-expiry")) {
+    await runPlanExpirySweep();
+  }
+});
 
 export default cron;
