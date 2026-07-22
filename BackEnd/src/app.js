@@ -9,7 +9,6 @@ import routes from "./routes/index.js";
 import config from "./config/env.js";
 import { errorConverter, errorHandler } from "./middlewares/error.middleware.js";
 import logger from "./utils/logger.js";
-import "./utils/cronJob.js";
 
 const app = express();
 
