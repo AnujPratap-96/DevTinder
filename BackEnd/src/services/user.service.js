@@ -155,7 +155,12 @@ export const getConnections = async (userId) => {
     });
   }
 
-  return visible;
+  return visible.sort((a, b) => {
+    if (!a.lastMessageAt && !b.lastMessageAt) return 0;
+    if (!a.lastMessageAt) return 1;
+    if (!b.lastMessageAt) return -1;
+    return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
+  });
 };
 
 const buildGeoStage = (lat, lng, radius) => {
