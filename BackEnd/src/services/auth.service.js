@@ -170,6 +170,12 @@ export const completeSignup = async ({
     logger.warn("Failed to send welcome email", error);
   }
 
+  // Auto-accept any pending invites for this email (non-blocking)
+  const { acceptInviteByEmail } = await import("../services/invite.service.js");
+  acceptInviteByEmail({ email: normalisedEmail, acceptedBy: user._id }).catch((e) =>
+    logger.warn("Failed to accept pending invites", e)
+  );
+
   await deleteOtpService(normalisedEmail, "signup");
 
   const token = await user.getJWT();

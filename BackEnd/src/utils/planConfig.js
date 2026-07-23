@@ -29,6 +29,7 @@ export const getActivePlans = async () => {
 const FALLBACK_LIMITS = {
   connectionRequestsPerDay: 0,
   aiCallsPerDay: 0,
+  invitesPerMonth: 0,
   canCreateProjects: false,
   canChat: false,
   canCall: false,

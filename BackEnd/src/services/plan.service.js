@@ -16,12 +16,14 @@ const DEFAULT_PLANS = [
     features: [
       "Browse and discover developers",
       "Send up to 10 connection requests / day",
+      "Invite up to 5 friends / month",
       "Bookmark profiles",
       "Endorse skills",
     ],
     limits: {
       connectionRequestsPerDay: 10,
       aiCallsPerDay: 0,
+      invitesPerMonth: 5,
       canCreateProjects: false,
       canChat: false,
       canCall: false,
@@ -46,12 +48,14 @@ const DEFAULT_PLANS = [
       "Verified Blue Badge",
       "100 connection requests / day",
       "AI features (20 / day)",
+      "Invite up to 25 friends / month",
       "Create projects",
       "See who viewed your profile",
     ],
     limits: {
       connectionRequestsPerDay: 100,
       aiCallsPerDay: 20,
+      invitesPerMonth: 25,
       canCreateProjects: true,
       canChat: true,
       canCall: true,
@@ -76,6 +80,7 @@ const DEFAULT_PLANS = [
       "Verified Blue Badge",
       "500 connection requests / day",
       "AI features (unlimited)",
+      "Invite up to 100 friends / month",
       "Create projects",
       "See who viewed your profile",
       "All premium themes",
@@ -83,6 +88,7 @@ const DEFAULT_PLANS = [
     limits: {
       connectionRequestsPerDay: 500,
       aiCallsPerDay: null,
+      invitesPerMonth: 100,
       canCreateProjects: true,
       canChat: true,
       canCall: true,
@@ -103,9 +109,9 @@ export const seedDefaultPlans = async () => {
       { $setOnInsert: plan },
       { upsert: true, setDefaultsOnInsert: true }
     );
-    // Always keep the call limits in sync with the code defaults so the
-    // feature works even for plans seeded before these fields existed.
-    // Other admin-editable fields (price, features) are left untouched.
+    // Always keep plan limits in sync with code defaults so features work
+    // even for plans seeded before these fields existed. Other admin-editable
+    // fields (price, features) are left untouched.
     await Plan.updateOne(
       { slug: plan.slug },
       {
@@ -113,6 +119,7 @@ export const seedDefaultPlans = async () => {
           "limits.canCall": plan.limits.canCall,
           "limits.canVideoCall": plan.limits.canVideoCall,
           "limits.canChat": plan.limits.canChat,
+          "limits.invitesPerMonth": plan.limits.invitesPerMonth,
         },
       }
     );
@@ -177,6 +184,7 @@ const sanitizePlanInput = (body = {}) => {
     data.limits = {
       connectionRequestsPerDay: numOrNull(l.connectionRequestsPerDay),
       aiCallsPerDay: numOrNull(l.aiCallsPerDay),
+      invitesPerMonth: numOrNull(l.invitesPerMonth),
       canCreateProjects: Boolean(l.canCreateProjects),
       canChat: Boolean(l.canChat),
       canCall: Boolean(l.canCall),
