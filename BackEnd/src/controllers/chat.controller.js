@@ -11,7 +11,8 @@ export const getChatController = asyncHandler(async (req, res) => {
   const data = await getChatWithUser({
     userId: req.user._id,
     targetUserId: req.params.targetUserId,
-    pagination: req.query,
+    limit: req.query.limit,
+    cursor: req.query.cursor,
   });
   return successResponse(res, { data });
 });
@@ -20,7 +21,8 @@ export const listMessagesController = asyncHandler(async (req, res) => {
   const data = await listChatMessages({
     matchId: req.params.matchId,
     userId: req.user._id,
-    pagination: req.query,
+    limit: req.query.limit,
+    cursor: req.query.cursor,
   });
   return successResponse(res, { data });
 });

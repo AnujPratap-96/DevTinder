@@ -17,9 +17,9 @@ export const getStatsController = asyncHandler(async (req, res) => {
 });
 
 export const listInvitesController = asyncHandler(async (req, res) => {
-  const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
-  const result = await inviteService.listInvites(req.user._id, { page, limit });
+  const cursor = req.query.cursor || null;
+  const result = await inviteService.listInvites(req.user._id, { limit, cursor });
   return successResponse(res, { data: result });
 });
 

@@ -2,12 +2,11 @@ import Invite from "../models/invite.js";
 
 export const findInvite = (filter) => Invite.findOne(filter);
 
-export const findInvites = (filter, options = {}) =>
-  Invite.find(filter)
-    .sort({ createdAt: -1 })
-    .skip(options.skip || 0)
-    .limit(options.limit || 50)
-    .lean();
+export const findInvites = (filter, { limit = 20, cursor = null } = {}) => {
+  const query = { ...filter };
+  if (cursor) query._id = { $lt: cursor };
+  return Invite.find(query).sort({ createdAt: -1 }).limit(limit + 1).lean();
+};
 
 export const countInvites = (filter) => Invite.countDocuments(filter);
 

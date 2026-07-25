@@ -27,13 +27,13 @@ export const createProjectController = asyncHandler(async (req, res) => {
 });
 
 export const listProjectsController = asyncHandler(async (req, res) => {
-  const projects = await listProjects({ status: req.query?.status, userId: req.user._id });
-  return successResponse(res, { data: { projects } });
+  const data = await listProjects({ status: req.query?.status, userId: req.user._id, limit: req.query?.limit, cursor: req.query?.cursor });
+  return successResponse(res, { data });
 });
 
 export const listMyProjectsController = asyncHandler(async (req, res) => {
-  const projects = await listMyProjects(req.user._id);
-  return successResponse(res, { data: { projects } });
+  const data = await listMyProjects(req.user._id, req.query);
+  return successResponse(res, { data });
 });
 
 export const requestProjectJoinController = asyncHandler(async (req, res) => {
@@ -84,8 +84,8 @@ export const listProjectMessagesController = asyncHandler(async (req, res) => {
   const data = await listProjectMessages({
     projectId: req.params.projectId,
     userId: req.user._id,
-    page: req.query?.page,
     limit: req.query?.limit,
+    cursor: req.query?.cursor,
   });
   return successResponse(res, { data });
 });

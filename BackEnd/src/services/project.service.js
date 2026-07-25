@@ -25,20 +25,26 @@ export const createProject = async ({ ownerId, title, description, techStack }) 
   return project;
 };
 
-export const listProjects = async ({ status, userId }) => {
+export const listProjects = async ({ status, userId, limit = 20, cursor = null }) => {
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
   const filter = {};
   if (status && ["open", "in_progress", "completed"].includes(status)) {
     filter.status = status;
   }
+  if (cursor) filter._id = { $lt: cursor };
 
-  const projects = await Project.find(filter)
+  const docs = await Project.find(filter)
     .populate("ownerId", "firstName lastName photoUrl role")
     .populate("members.userId", "firstName lastName photoUrl role")
     .populate("joinRequests.userId", "firstName lastName photoUrl")
     .sort({ createdAt: -1 })
+    .limit(pageSize + 1)
     .lean();
 
-  return projects.map((project) => {
+  const hasMore = docs.length > pageSize;
+  const projects = hasMore ? docs.slice(0, pageSize) : docs;
+
+  const mapped = projects.map((project) => {
     const isMember = project.members?.some(
       (m) => getMemberUserId(m)?.toString() === userId.toString()
     );
@@ -58,14 +64,25 @@ export const listProjects = async ({ status, userId }) => {
       hasPendingRequest: !!hasPendingRequest,
     };
   });
+
+  const nextCursor = hasMore ? projects[projects.length - 1]._id : null;
+  return { projects: mapped, nextCursor, hasMore };
 };
 
-export const listMyProjects = async (userId) => {
-  return Project.find({ "members.userId": userId })
+export const listMyProjects = async (userId, { limit = 20, cursor = null } = {}) => {
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const filter = { "members.userId": userId };
+  if (cursor) filter._id = { $lt: cursor };
+  const docs = await Project.find(filter)
     .populate("ownerId", "firstName lastName photoUrl role")
     .populate("members.userId", "firstName lastName photoUrl role")
     .sort({ createdAt: -1 })
+    .limit(pageSize + 1)
     .lean();
+  const hasMore = docs.length > pageSize;
+  const projects = hasMore ? docs.slice(0, pageSize) : docs;
+  const nextCursor = hasMore ? projects[projects.length - 1]._id : null;
+  return { projects, nextCursor, hasMore };
 };
 
 export const requestProjectJoin = async ({ projectId, userId }) => {
@@ -313,7 +330,7 @@ export const addProjectMessage = async ({ projectId, userId, message, mentions }
   return addedMessage;
 };
 
-export const listProjectMessages = async ({ projectId, userId, page = 1, limit = 50 }) => {
+export const listProjectMessages = async ({ projectId, userId, limit = 50, cursor = null }) => {
   const project = await Project.findById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
@@ -323,24 +340,27 @@ export const listProjectMessages = async ({ projectId, userId, page = 1, limit =
     throw new AppError({ message: "Only members can view messages", statusCode: 403 });
   }
 
-  const numericPage = parseInt(page, 10);
-  const numericLimit = parseInt(limit, 10);
-  const skip = (numericPage - 1) * numericLimit;
-  const totalMessages = project.messages.length;
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
 
   await project.populate("messages.senderId", "firstName lastName photoUrl");
 
-  const messages = project.messages
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(skip, skip + numericLimit)
-    .reverse();
+  let messages = project.messages.sort((a, b) => b.createdAt - a.createdAt);
+
+  if (cursor) {
+    const cursorIndex = messages.findIndex((m) => m._id.toString() === cursor);
+    if (cursorIndex !== -1) {
+      messages = messages.slice(cursorIndex + 1);
+    }
+  }
+
+  const hasMore = messages.length > pageSize;
+  const sliced = hasMore ? messages.slice(0, pageSize) : messages;
+  const nextCursor = hasMore ? sliced[sliced.length - 1]._id : null;
 
   return {
-    messages,
-    page: numericPage,
-    limit: numericLimit,
-    total: totalMessages,
-    hasMore: skip + messages.length < totalMessages,
+    messages: sliced.reverse(),
+    nextCursor,
+    hasMore,
   };
 };
 

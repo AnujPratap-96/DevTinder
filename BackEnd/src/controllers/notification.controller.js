@@ -8,8 +8,8 @@ import {
 } from "../services/notification.service.js";
 
 export const listNotificationsController = asyncHandler(async (req, res) => {
-  const notifications = await listNotifications({ userId: req.user._id });
-  return successResponse(res, { data: { notifications } });
+  const data = await listNotifications({ userId: req.user._id, limit: req.query.limit, cursor: req.query.cursor });
+  return successResponse(res, { data });
 });
 
 export const markNotificationsController = asyncHandler(async (req, res) => {

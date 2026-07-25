@@ -51,6 +51,7 @@ export const sendInvite = async ({ userId, email }) => {
 export const getStats = async (userId) => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const user = await User.findById(userId).select("membershipType").lean();
 
   const [totalSent, pendingCount, acceptedCount] = await Promise.all([
     inviteRepo.countInvites({
@@ -62,7 +63,7 @@ export const getStats = async (userId) => {
     inviteRepo.countInvites({ senderId: userId, status: "accepted" }),
   ]);
 
-  const planLimits = await getPlanLimits("free");
+  const planLimits = await getPlanLimits(user?.membershipType || "free");
   const rawLimit = planLimits.invitesPerMonth;
   const limit = rawLimit === null || rawLimit === undefined ? Infinity : rawLimit;
 
@@ -75,16 +76,13 @@ export const getStats = async (userId) => {
   };
 };
 
-export const listInvites = async (userId, { page = 1, limit = 20 } = {}) => {
-  const skip = (page - 1) * limit;
+export const listInvites = async (userId, { limit = 20, cursor = null } = {}) => {
   const filter = { senderId: userId };
-
-  const [invites, total] = await Promise.all([
-    inviteRepo.findInvites(filter, { skip, limit }),
-    inviteRepo.countInvites(filter),
-  ]);
-
-  return { invites, total, page, limit, totalPages: Math.ceil(total / limit) };
+  const invites = await inviteRepo.findInvites(filter, { limit, cursor });
+  const hasMore = invites.length > limit;
+  if (hasMore) invites.pop();
+  const nextCursor = invites.length ? invites[invites.length - 1]._id : null;
+  return { invites, nextCursor, hasMore };
 };
 
 export const cancelInvite = async ({ userId, inviteId }) => {

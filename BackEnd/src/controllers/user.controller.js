@@ -12,18 +12,18 @@ import {
 } from "../services/user.service.js";
 
 export const getReceivedRequestsController = asyncHandler(async (req, res) => {
-  const requests = await getReceivedRequests(req.user._id);
+  const data = await getReceivedRequests(req.user._id, req.query);
   return successResponse(res, {
     message: "Requests fetched successfully",
-    data: requests,
+    data,
   });
 });
 
 export const getConnectionsController = asyncHandler(async (req, res) => {
-  const connections = await getConnections(req.user._id);
+  const data = await getConnections(req.user._id, req.query);
   return successResponse(res, {
     message: "Connections fetched successfully",
-    data: connections,
+    data,
   });
 });
 
@@ -38,19 +38,19 @@ export const getFeedController = asyncHandler(async (req, res) => {
 
 export const getUsersController = asyncHandler(async (req, res) => {
   const loggedInUser = req.user;
-  const users = await getUsersWithFilters(loggedInUser, req.query || {});
+  const result = await getUsersWithFilters(loggedInUser, req.query || {});
   return successResponse(res, {
     message: "Users fetched successfully",
-    data: users,
+    data: result,
   });
 });
 
 export const searchUsersController = asyncHandler(async (req, res) => {
   const loggedInUser = req.user;
-  const users = await searchUsers(loggedInUser, req.query || {});
+  const result = await searchUsers(loggedInUser, req.query || {});
   return successResponse(res, {
     message: "Search completed successfully",
-    data: users,
+    data: result,
   });
 });
 

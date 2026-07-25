@@ -2,15 +2,21 @@ import Notification from "../models/notification.js";
 import { formatNotification } from "../repositories/notification.repository.js";
 import { ValidationError, NotFoundError } from "../errors/index.js";
 
-export const listNotifications = async ({ userId, limit = 100 }) => {
+export const listNotifications = async ({ userId, limit = 20, cursor = null }) => {
   if (!userId) {
     throw new ValidationError("User ID is required");
   }
-  const docs = await Notification.find({ userId })
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+  const filter = { userId };
+  if (cursor) filter._id = { $lt: cursor };
+  const docs = await Notification.find(filter)
     .sort({ createdAt: -1 })
-    .limit(limit)
+    .limit(pageSize + 1)
     .lean();
-  return docs.map(formatNotification);
+  const hasMore = docs.length > pageSize;
+  const notifications = hasMore ? docs.slice(0, pageSize) : docs;
+  const nextCursor = hasMore ? notifications[notifications.length - 1]._id : null;
+  return { notifications: notifications.map(formatNotification), nextCursor, hasMore };
 };
 
 export const markNotificationsAsRead = async ({ userId, notificationIds }) => {

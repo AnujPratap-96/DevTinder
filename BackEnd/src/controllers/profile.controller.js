@@ -59,8 +59,8 @@ export const updateAvailabilityController = asyncHandler(async (req, res) => {
 });
 
 export const getProfileViewsController = asyncHandler(async (req, res) => {
-  const views = await getProfileViews(req.user._id);
-  return successResponse(res, { data: { views } });
+  const data = await getProfileViews(req.user._id, req.query);
+  return successResponse(res, { data });
 });
 
 export const recordProfileViewController = asyncHandler(async (req, res) => {

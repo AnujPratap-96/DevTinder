@@ -96,45 +96,50 @@ const mapCandidate = (loggedInUser, candidateDoc) => {
   return candidate;
 };
 
-export const getReceivedRequests = async (userId) => {
-  const requests = await populateConnectionRequests(
-    findConnectionRequests({
-      toUserId: userId,
-      status: "interested",
-    }),
+export const getReceivedRequests = async (userId, { limit = 20, cursor = null } = {}) => {
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const filter = { toUserId: userId, status: "interested" };
+  if (cursor) filter._id = { $lt: cursor };
+  const docs = await populateConnectionRequests(
+    findConnectionRequests(filter),
     USER_SAFE_FIELDS
-  ).lean();
+  ).sort({ createdAt: -1 }).limit(pageSize + 1).lean();
 
   const hidden = await getHiddenUserIds(userId);
-  return requests.filter(
+  const visible = docs.filter(
     (req) => req.fromUserId && !hidden.has(req.fromUserId._id.toString())
   );
+  const hasMore = docs.length > pageSize;
+  const requests = hasMore ? visible.slice(0, pageSize) : visible;
+  const nextCursor = hasMore && docs.length > 0 ? docs[pageSize - 1]._id : null;
+  return { requests, nextCursor, hasMore };
 };
 
-export const getConnections = async (userId) => {
-  const connections = await populateConnectionRequests(
-    findConnectionRequests({
-      $or: [
-        { fromUserId: userId, status: "accepted" },
-        { toUserId: userId, status: "accepted" },
-      ],
-    }),
+export const getConnections = async (userId, { limit = 20, cursor = null } = {}) => {
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const filter = {
+    $or: [
+      { fromUserId: userId, status: "accepted" },
+      { toUserId: userId, status: "accepted" },
+    ],
+  };
+  if (cursor) filter._id = { $lt: cursor };
+  const docs = await populateConnectionRequests(
+    findConnectionRequests(filter),
     USER_SAFE_FIELDS
-  ).lean();
+  ).sort({ createdAt: -1 }).limit(pageSize + 1).lean();
 
-  if (!connections.length) {
-    return [];
+  if (!docs.length) {
+    return { connections: [], nextCursor: null, hasMore: false };
   }
 
   const hidden = await getHiddenUserIds(userId);
-
   const chats = await findChatsByParticipant(userId);
   const visible = [];
 
-  for (const row of connections) {
+  for (const row of docs) {
     const fromId = row.fromUserId?._id;
     const toId = row.toUserId?._id;
-    // Skip orphaned requests where a participant user no longer exists.
     if (!fromId || !toId) continue;
 
     const targetUser = fromId.equals(userId) ? row.toUserId : row.fromUserId;
@@ -155,12 +160,17 @@ export const getConnections = async (userId) => {
     });
   }
 
-  return visible.sort((a, b) => {
+  visible.sort((a, b) => {
     if (!a.lastMessageAt && !b.lastMessageAt) return 0;
     if (!a.lastMessageAt) return 1;
     if (!b.lastMessageAt) return -1;
     return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
   });
+
+  const hasMore = docs.length > pageSize;
+  const connections = hasMore ? visible.slice(0, pageSize) : visible;
+  const nextCursor = hasMore && docs.length > 0 ? docs[pageSize - 1]._id : null;
+  return { connections, nextCursor, hasMore };
 };
 
 const buildGeoStage = (lat, lng, radius) => {
@@ -180,11 +190,8 @@ const buildGeoStage = (lat, lng, radius) => {
   return [stage];
 };
 
-export const getFeed = async (loggedInUser, query) => {
-  let limit = parseInt(query.limit, 10) || DEFAULT_FEED_LIMIT;
-  limit = Math.min(limit, MAX_FEED_LIMIT);
-  const page = Math.max(parseInt(query.page, 10) || 1, 1);
-  const skip = (page - 1) * limit;
+export const getFeed = async (loggedInUser, { limit = DEFAULT_FEED_LIMIT, cursor = null, ...query } = {}) => {
+  limit = Math.min(parseInt(limit, 10) || DEFAULT_FEED_LIMIT, MAX_FEED_LIMIT);
 
   const lat = query.lat ? Number(query.lat) : null;
   const lng = query.lng ? Number(query.lng) : null;
@@ -206,17 +213,19 @@ export const getFeed = async (loggedInUser, query) => {
   reported.forEach((r) => excludedIds.add(r.reportedUserId.toString()));
 
   const excludedObjectIds = Array.from(excludedIds).map((id) => createObjectId(id));
+  const cursorObjId = cursor ? createObjectId(cursor) : null;
+
+  const matchStage = {
+    _id: { $nin: excludedObjectIds },
+    availability: { $ne: "not_looking" },
+    blockedUsers: { $ne: loggedInUser._id },
+    isBanned: { $ne: true },
+  };
+  if (cursorObjId) matchStage._id.$lt = cursorObjId;
 
   const pipeline = [
     ...buildGeoStage(lat, lng, radius),
-    {
-      $match: {
-        _id: { $nin: excludedObjectIds },
-        availability: { $ne: "not_looking" },
-        blockedUsers: { $ne: loggedInUser._id },
-        isBanned: { $ne: true },
-      },
-    },
+    { $match: matchStage },
     {
       $project: {
         firstName: 1,
@@ -237,24 +246,22 @@ export const getFeed = async (loggedInUser, query) => {
         socialLinks: 1,
       },
     },
-    { $skip: skip },
-    { $limit: limit * 2 },
+    { $limit: limit + 1 },
   ];
 
   const candidates = await aggregateUsers(pipeline);
-  const scored = candidates
+  const hasMore = candidates.length > limit;
+  const sliced = hasMore ? candidates.slice(0, limit) : candidates;
+  const scored = sliced
     .map((candidate) => mapCandidate(loggedInUser, candidate))
     .sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0))
     .slice(0, limit);
+  const nextCursor = hasMore && sliced.length > 0 ? sliced[sliced.length - 1]._id : null;
 
-  return {
-    page,
-    limit,
-    users: scored,
-  };
+  return { users: scored, nextCursor, hasMore };
 };
 
-export const getUsersWithFilters = async (loggedInUser, query) => {
+export const getUsersWithFilters = async (loggedInUser, { limit = MAX_USER_FETCH_LIMIT, cursor = null, ...query } = {}) => {
   const {
     role,
     availability,
@@ -265,6 +272,8 @@ export const getUsersWithFilters = async (loggedInUser, query) => {
     lng,
     radius,
   } = query ?? {};
+
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || MAX_USER_FETCH_LIMIT, 1), MAX_USER_FETCH_LIMIT);
 
   const matchStage = {
     _id: { $ne: loggedInUser._id },
@@ -290,6 +299,9 @@ export const getUsersWithFilters = async (loggedInUser, query) => {
   if (maxExperience !== undefined) {
     expFilters.push({ experienceYears: { $lte: Number(maxExperience) } });
   }
+
+  const cursorObjId = cursor ? createObjectId(cursor) : null;
+  if (cursorObjId) matchStage._id.$lt = cursorObjId;
 
   const pipeline = [
     ...buildGeoStage(
@@ -325,15 +337,19 @@ export const getUsersWithFilters = async (loggedInUser, query) => {
         socialLinks: 1,
       },
     },
-    { $limit: MAX_USER_FETCH_LIMIT }
+    { $limit: pageSize + 1 }
   );
 
   const results = await aggregateUsers(pipeline);
-  return results.map((candidate) => mapCandidate(loggedInUser, candidate));
+  const hasMore = results.length > pageSize;
+  const users = hasMore ? results.slice(0, pageSize) : results;
+  const nextCursor = hasMore && users.length > 0 ? users[users.length - 1]._id : null;
+  return { users: users.map((candidate) => mapCandidate(loggedInUser, candidate)), nextCursor, hasMore };
 };
 
-export const searchUsers = async (loggedInUser, query) => {
+export const searchUsers = async (loggedInUser, { limit = 20, cursor = null, ...query } = {}) => {
   const { q, role, minExperience, maxExperience } = query;
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
 
   const matchStage = {
     _id: { $ne: loggedInUser._id },
@@ -367,13 +383,16 @@ export const searchUsers = async (loggedInUser, query) => {
     expFilters.push({ experienceYears: { $lte: Number(maxExperience) } });
   }
 
+  const cursorObjId = cursor ? createObjectId(cursor) : null;
+  if (cursorObjId) matchStage._id.$lt = cursorObjId;
+
   const pipeline = [{ $match: matchStage }];
 
   if (expFilters.length) {
     pipeline.push({ $match: { $and: expFilters } });
   }
 
-  pipeline.push({ $sort: { firstName: 1 } }, { $limit: 20 });
+  pipeline.push({ $sort: { _id: -1 } }, { $limit: pageSize + 1 });
 
   pipeline.push({
     $project: {
@@ -396,8 +415,11 @@ export const searchUsers = async (loggedInUser, query) => {
   });
 
   const results = await aggregateUsers(pipeline);
+  const hasMore = results.length > pageSize;
+  const sliced = hasMore ? results.slice(0, pageSize) : results;
+  const nextCursor = hasMore && sliced.length > 0 ? sliced[sliced.length - 1]._id : null;
 
-  const targetIds = results.map((r) => r._id);
+  const targetIds = sliced.map((r) => r._id);
   const relevantRequests = await findConnectionRequests({
     $or: [
       { fromUserId: loggedInUser._id, toUserId: { $in: targetIds } },
@@ -406,7 +428,7 @@ export const searchUsers = async (loggedInUser, query) => {
   })
     .lean();
 
-  return results.map((candidate) => {
+  const users = sliced.map((candidate) => {
     const mappedCandidate = mapCandidate(loggedInUser, candidate);
     const request = relevantRequests.find(
       (r) =>
@@ -430,6 +452,8 @@ export const searchUsers = async (loggedInUser, query) => {
     mappedCandidate.relationshipStatus = status;
     return mappedCandidate;
   });
+
+  return { users, nextCursor, hasMore };
 };
 
 export const getBookmarksForUser = async (userId) => {

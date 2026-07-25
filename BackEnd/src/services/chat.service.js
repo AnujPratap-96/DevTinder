@@ -27,14 +27,7 @@ const ensureParticipant = async (matchId, userId) => {
   return chat;
 };
 
-const parsePagination = ({ page = 1, limit = 20 }) => {
-  const numericPage = Math.max(parseInt(page, 10) || 1, 1);
-  const numericLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
-  const skip = (numericPage - 1) * numericLimit;
-  return { page: numericPage, limit: numericLimit, skip };
-};
-
-export const getChatWithUser = async ({ userId, targetUserId, pagination }) => {
+export const getChatWithUser = async ({ userId, targetUserId, limit = 20, cursor = null }) => {
   if (!userId || !targetUserId) {
     throw new ValidationError("userId and targetUserId are required");
   }
@@ -42,11 +35,16 @@ export const getChatWithUser = async ({ userId, targetUserId, pagination }) => {
   await ensureConnection(userId, targetUserId);
 
   const chat = await Chat.findOrCreateByParticipants(userId, targetUserId);
-  const { limit } = parsePagination(pagination ?? {});
-  const messages = await Message.find({ matchId: chat._id })
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+  const filter = { matchId: chat._id };
+  if (cursor) filter._id = { $lt: cursor };
+  const docs = await Message.find(filter)
     .sort({ createdAt: -1 })
-    .limit(limit)
+    .limit(pageSize + 1)
     .lean();
+  const hasMore = docs.length > pageSize;
+  const messages = hasMore ? docs.slice(0, pageSize) : docs;
+  const nextCursor = hasMore ? messages[messages.length - 1]._id : null;
 
   return {
     chat: {
@@ -55,28 +53,28 @@ export const getChatWithUser = async ({ userId, targetUserId, pagination }) => {
       lastMessageAt: chat.lastMessageAt,
     },
     messages: messages.reverse(),
+    nextCursor,
+    hasMore,
   };
 };
 
-export const listChatMessages = async ({ matchId, userId, pagination }) => {
+export const listChatMessages = async ({ matchId, userId, limit = 20, cursor = null }) => {
   await ensureParticipant(matchId, userId);
-  const { limit, skip, page } = parsePagination(pagination ?? {});
-
-  const [messages, total] = await Promise.all([
-    Message.find({ matchId })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
-    Message.countDocuments({ matchId }),
-  ]);
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+  const filter = { matchId };
+  if (cursor) filter._id = { $lt: cursor };
+  const docs = await Message.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(pageSize + 1)
+    .lean();
+  const hasMore = docs.length > pageSize;
+  const messages = hasMore ? docs.slice(0, pageSize) : docs;
+  const nextCursor = hasMore ? messages[messages.length - 1]._id : null;
 
   return {
-    page,
-    limit,
-    total,
-    hasMore: skip + messages.length < total,
     messages: messages.reverse(),
+    nextCursor,
+    hasMore,
   };
 };
 

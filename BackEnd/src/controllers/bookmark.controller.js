@@ -11,8 +11,8 @@ export const createBookmarkController = asyncHandler(async (req, res) => {
 });
 
 export const listBookmarksController = asyncHandler(async (req, res) => {
-  const bookmarks = await listBookmarks(req.user._id);
-  return successResponse(res, { data: { bookmarks } });
+  const data = await listBookmarks(req.user._id, req.query);
+  return successResponse(res, { data });
 });
 
 export const deleteBookmarkController = asyncHandler(async (req, res) => {

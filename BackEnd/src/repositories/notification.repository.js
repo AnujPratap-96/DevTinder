@@ -28,6 +28,13 @@ export const formatNotification = (doc) => {
   return { _id, type, isRead, createdAt, readAt, payload: safePayload };
 };
 
+export const listNotifications = (filter = {}, { limit = 20, cursor = null } = {}) => {
+  const query = { ...filter };
+  if (cursor) query._id = { $lt: cursor };
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+  return Notification.find(query).sort({ createdAt: -1 }).limit(pageSize + 1).lean();
+};
+
 export const createNotification = (payload) => Notification.create(payload);
 
 export const deleteNotificationById = (notificationId, userId) =>

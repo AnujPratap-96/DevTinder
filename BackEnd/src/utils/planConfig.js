@@ -46,6 +46,7 @@ const DEFAULT_LIMITS_BY_SLUG = {
   free: {
     connectionRequestsPerDay: 10,
     aiCallsPerDay: 0,
+    invitesPerMonth: 5,
     canCreateProjects: false,
     canChat: false,
     canCall: false,
@@ -57,6 +58,7 @@ const DEFAULT_LIMITS_BY_SLUG = {
   silver: {
     connectionRequestsPerDay: 100,
     aiCallsPerDay: 20,
+    invitesPerMonth: 25,
     canCreateProjects: true,
     canChat: true,
     canCall: true,
@@ -68,6 +70,7 @@ const DEFAULT_LIMITS_BY_SLUG = {
   gold: {
     connectionRequestsPerDay: 500,
     aiCallsPerDay: null,
+    invitesPerMonth: 100,
     canCreateProjects: true,
     canChat: true,
     canCall: true,
