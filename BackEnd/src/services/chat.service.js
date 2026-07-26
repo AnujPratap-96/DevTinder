@@ -1,7 +1,8 @@
-import Chat from "../models/chat.js";
-import Message from "../models/message.js";
-import ConnectionRequest from "../models/connectionRequest.js";
+import { randomUUID } from "crypto";
 import { AppError, ValidationError, NotFoundError } from "../errors/index.js";
+import uploadImageCloudinary from "../utils/cloudinary.js";
+import { getIO } from "../utils/socket.js";
+import * as chatRepo from "../repositories/chat.repository.js";
 
 const ensureConnection = async (userId, targetUserId) => {
   const isConnection = await ConnectionRequest.findOne({
@@ -111,9 +112,54 @@ export const deleteMessageService = async ({ messageId, userId }) => {
   return message;
 };
 
+export const uploadChatImage = async ({ userId, targetUserId, matchId, file }) => {
+  if (!file) throw new ValidationError("Image file is required");
+  if (!userId || !targetUserId) throw new ValidationError("userId and targetUserId are required");
+
+  const isConnected = await chatRepo.ensureConnection(userId, targetUserId);
+  if (!isConnected) {
+    throw new AppError({ message: "You are not connected with this user", statusCode: 403 });
+  }
+
+  const chat = matchId
+    ? await chatRepo.findChatById(matchId)
+    : await chatRepo.findOrCreateChat(userId, targetUserId);
+  if (!chat) throw new NotFoundError("Conversation");
+
+  const uploadResult = await uploadImageCloudinary(file);
+  if (!uploadResult?.secure_url) {
+    throw new AppError({ message: uploadResult?.message || "Image upload failed", statusCode: 500 });
+  }
+
+  const msg = await chatRepo.createMessage({
+    matchId: chat._id,
+    senderId: userId,
+    receiverId: targetUserId,
+    clientMessageId: `img-${randomUUID()}`,
+    message: uploadResult.secure_url,
+    isEncrypted: false,
+    messageType: "image",
+    delivered: true,
+    deliveredAt: new Date(),
+    metadata: { width: uploadResult.width, height: uploadResult.height },
+  });
+
+  await chatRepo.updateChatLastMessage(chat._id, msg.createdAt);
+
+  const populated = await chatRepo.populateMessageSender(msg._id);
+
+  const io = getIO();
+  if (io) {
+    io.to(chat._id.toString()).emit("message:created", populated);
+  }
+
+  return populated;
+};
+
 export default {
   getChatWithUser,
   listChatMessages,
   markMessagesSeenService,
   deleteMessageService,
+  uploadChatImage,
 };

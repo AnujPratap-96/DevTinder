@@ -5,6 +5,7 @@ import {
   listChatMessages,
   markMessagesSeenService,
   deleteMessageService,
+  uploadChatImage,
 } from "../services/chat.service.js";
 
 export const getChatController = asyncHandler(async (req, res) => {
@@ -41,4 +42,14 @@ export const deleteMessageController = asyncHandler(async (req, res) => {
     userId: req.user._id,
   });
   return successResponse(res, { message: "Message deleted" });
+});
+
+export const uploadChatImageController = asyncHandler(async (req, res) => {
+  const message = await uploadChatImage({
+    userId: req.user._id,
+    targetUserId: req.body.targetUserId,
+    matchId: req.body.matchId,
+    file: req.file,
+  });
+  return successResponse(res, { data: { message } });
 });
