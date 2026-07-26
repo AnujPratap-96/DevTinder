@@ -1,17 +1,32 @@
 import ConnectionRequest from "../models/connectionRequest.js";
 import User from "../models/user.model.js";
+import { subDays, startOfDay, endOfDay } from "date-fns";
 import { run as sendEmail } from "./sendEmail.js";
 import logger from "./logger.js";
 
 export const runDailyReminders = async () => {
   try {
+    const yesterday = subDays(new Date(), 1);
+    const yesterdayStart = startOfDay(yesterday);
+    const yesterdayEnd = endOfDay(yesterday);
+
     const pendingRequests = await ConnectionRequest.find({
       status: "interested",
-    }).populate("fromUserId toUserId");
+      createdAt: { $gte: yesterdayStart, $lt: yesterdayEnd },
+    })
+      .select("toUserId")
+      .populate({ path: "toUserId", select: "emailId" });
 
     const listOfEmails = [
       ...new Set(pendingRequests.map((req) => req.toUserId?.emailId).filter(Boolean)),
     ];
+
+    if (listOfEmails.length === 0) {
+      logger.info("No pending requests from yesterday to remind about");
+      return;
+    }
+
+    logger.info(`Sending ${listOfEmails.length} daily reminders`);
 
     for (const email of listOfEmails) {
       try {
