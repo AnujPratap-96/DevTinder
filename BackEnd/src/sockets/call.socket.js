@@ -1,10 +1,13 @@
 import { emitToUser, ensureConnection, activeUsers } from "../utils/socket.js";
 import { getPlanLimits } from "../utils/planConfig.js";
 import User from "../models/user.model.js";
+import Chat from "../models/chat.js";
+import Message from "../models/message.js";
 import * as callService from "../services/call.service.js";
 import * as callManager from "../services/callManager.js";
 import config from "../config/env.js";
 import logger from "../utils/logger.js";
+import { randomUUID } from "crypto";
 
 const inviteTimeouts = new Map(); // callId -> setTimeout handle
 
@@ -28,6 +31,29 @@ const clearInviteTimeout = (callId) => {
     clearTimeout(t);
     inviteTimeouts.delete(callId);
   }
+};
+
+const createCallMessage = async ({ io, chatId, callerId, calleeId, callId, type, status, durationSec }) => {
+  if (!chatId) return null;
+  const clientMessageId = `call-${callId}-${status}`;
+  const exists = await Message.findOne({ clientMessageId });
+  if (exists) return exists;
+  const msg = await Message.create({
+    matchId: chatId,
+    senderId: callerId,
+    receiverId: calleeId,
+    clientMessageId,
+    message: "",
+    isEncrypted: false,
+    messageType: "call",
+    metadata: {
+      callDetails: { type, status, durationSec: durationSec || 0 },
+    },
+  });
+  await Chat.findByIdAndUpdate(chatId, { $set: { lastMessageAt: msg.createdAt || new Date() } });
+  const populated = await Message.findById(msg._id).populate("senderId", "firstName lastName photoUrl").lean();
+  if (io) io.to(chatId.toString()).emit("message:created", populated);
+  return populated;
 };
 
 const scheduleMissed = (callId) => {
@@ -138,6 +164,15 @@ export const initializeCallSocket = (io) => {
         await callService.acceptCall(callId);
         clearInviteTimeout(callId);
         emitToUser(call.callerId, "call:accept", { callId });
+        createCallMessage({
+          io,
+          chatId: call.chatId,
+          callerId: call.callerId,
+          calleeId: call.calleeId,
+          callId,
+          type: call.type,
+          status: "started",
+        });
       } catch (err) {
         socket.emit("call:error", { message: err.message });
       }
@@ -187,9 +222,21 @@ export const initializeCallSocket = (io) => {
       try {
         const call = callManager.getCall(callId);
         if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
-        await callService.endCall(callId, reason);
+        const session = await callService.endCall(callId, reason);
         clearInviteTimeout(callId);
         emitToUser(otherParty(call, userId), "call:end", { callId, reason });
+        if (session && session.connectedAt) {
+          createCallMessage({
+            io,
+            chatId: call.chatId || session.chatId,
+            callerId: call.callerId,
+            calleeId: call.calleeId,
+            callId,
+            type: call.type,
+            status: "ended",
+            durationSec: session.durationSec || 0,
+          });
+        }
       } catch (err) {
         socket.emit("call:error", { message: err.message });
       }
