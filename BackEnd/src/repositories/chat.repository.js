@@ -8,6 +8,8 @@ export const findChatsByParticipant = (userId) => {
 
 export const findChatById = (chatId) => Chat.findById(chatId);
 
+export const findChatByIdLean = (chatId) => Chat.findById(chatId).lean();
+
 export const findOrCreateChat = (userId, targetUserId) =>
   Chat.findOrCreateByParticipants(userId, targetUserId);
 
@@ -24,6 +26,17 @@ export const ensureConnection = async (userId, targetUserId) => {
 export const createMessage = (data) => Message.create(data);
 
 export const findMessageById = (id) => Message.findById(id);
+
+export const findMessages = (filter, { limit = 20, cursor = null, sort = { createdAt: -1 } } = {}) => {
+  const query = { ...filter };
+  if (cursor) query._id = { $lt: cursor };
+  return Message.find(query).sort(sort).limit(limit + 1).lean();
+};
+
+export const deleteMessageById = (id) => Message.findByIdAndDelete(id);
+
+export const markMessagesAsSeen = ({ matchId, receiverId }) =>
+  Message.markAsSeen({ matchId, receiverId });
 
 export const populateMessageSender = (messageId) =>
   Message.findById(messageId).populate("senderId", "firstName lastName photoUrl").lean();

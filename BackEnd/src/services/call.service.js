@@ -31,35 +31,24 @@ export const endCall = async (callId, reason = "hangup") => {
   callManager.removeCall(callId);
   const session = await callRepo.findCallSession(callId);
   if (!session) return null;
-  if (session.status === "ringing" && reason === "timeout") {
-    session.status = "missed";
-    session.endReason = "timeout";
-    session.endedAt = new Date();
-    await session.save();
-    return session;
+
+  if (session.status === "ringing") {
+    const statusMap = { timeout: "missed", decline: "declined", busy: "cancelled" };
+    const status = statusMap[reason] || "missed";
+    return callRepo.updateCallSession(callId, { status, endReason: reason, endedAt: new Date() });
   }
-  if (session.status === "ringing" && reason === "decline") {
-    session.status = "declined";
-    session.endReason = "decline";
-    session.endedAt = new Date();
-    await session.save();
-    return session;
-  }
-  if (session.status === "ringing" && reason === "busy") {
-    session.status = "cancelled";
-    session.endReason = "busy";
-    session.endedAt = new Date();
-    await session.save();
-    return session;
-  }
-  session.endedAt = new Date();
-  session.status = "completed";
-  session.endReason = reason;
-  if (session.connectedAt) {
-    session.durationSec = Math.max(0, Math.round((session.endedAt - session.connectedAt) / 1000));
-  }
-  await session.save();
-  return session;
+
+  const endedAt = new Date();
+  const durationSec = session.connectedAt
+    ? Math.max(0, Math.round((endedAt - session.connectedAt) / 1000))
+    : 0;
+
+  return callRepo.updateCallSession(callId, {
+    status: "completed",
+    endReason: reason,
+    endedAt,
+    durationSec,
+  });
 };
 
 export const getHistory = (userId, opts) => callRepo.listCallHistory(userId, opts);
@@ -73,8 +62,7 @@ export const ackCall = async (callId, userId) => {
   if (!session) return null;
   if (session.calleeId.toString() !== userId.toString()) return null;
   if (session.status === "missed") {
-    session.ack = true;
-    await session.save();
+    return callRepo.updateCallSession(callId, { ack: true });
   }
   return session;
 };

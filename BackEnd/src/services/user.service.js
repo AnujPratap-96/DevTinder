@@ -13,7 +13,7 @@ import {
   saveUser,
 } from "../repositories/user.repository.js";
 import { findChatsByParticipant } from "../repositories/chat.repository.js";
-import Report from "../models/report.js";
+import * as reportRepo from "../repositories/report.repository.js";
 import { haversineDistanceKm } from "../utils/location.js";
 import {
   USER_SAFE_FIELDS,
@@ -32,17 +32,13 @@ const buildConnectionExclusionSet = (connections, loggedInUserId) => {
   return ids;
 };
 
-// IDs the given user must never see: users they blocked, users they reported,
-// and users who blocked them.
 const getHiddenUserIds = async (userId) => {
   const hidden = new Set();
 
   const me = await findUserById(userId).select("blockedUsers");
   (me?.blockedUsers ?? []).forEach((id) => hidden.add(id.toString()));
 
-  const reported = await Report.find({ reporterId: userId })
-    .select("reportedUserId")
-    .lean();
+  const reported = await reportRepo.findReportsByReporter(userId);
   reported.forEach((r) => hidden.add(r.reportedUserId.toString()));
 
   const blockers = await findUsers({ blockedUsers: userId }, "_id").lean();
@@ -100,10 +96,11 @@ export const getReceivedRequests = async (userId, { limit = 20, cursor = null } 
   const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
   const filter = { toUserId: userId, status: "interested" };
   if (cursor) filter._id = { $lt: cursor };
-  const docs = await populateConnectionRequests(
-    findConnectionRequests(filter),
-    USER_SAFE_FIELDS
-  ).sort({ createdAt: -1 }).limit(pageSize + 1).lean();
+  const docs = await findConnectionRequests(filter)
+    .populate("fromUserId", USER_SAFE_FIELDS)
+    .sort({ createdAt: -1 })
+    .limit(pageSize + 1)
+    .lean();
 
   const hidden = await getHiddenUserIds(userId);
   const visible = docs.filter(
@@ -207,9 +204,7 @@ export const getFeed = async (loggedInUser, { limit = DEFAULT_FEED_LIMIT, cursor
   const excludedIds = buildConnectionExclusionSet(existingConnections, loggedInUser._id);
   (loggedInUser.blockedUsers ?? []).forEach((id) => excludedIds.add(id.toString()));
 
-  const reported = await Report.find({ reporterId: loggedInUser._id })
-    .select("reportedUserId")
-    .lean();
+  const reported = await reportRepo.findReportsByReporter(loggedInUser._id);
   reported.forEach((r) => excludedIds.add(r.reportedUserId.toString()));
 
   const excludedObjectIds = Array.from(excludedIds).map((id) => createObjectId(id));
@@ -525,9 +520,6 @@ export const endorseConnection = async (loggedInUser, targetUserId, skill) => {
   };
 };
 
-// ── End-to-end encryption key exchange ──────────────────────────────────────
-// The private key never reaches the server. We only store the public key so
-// other participants can derive a shared conversation secret client-side.
 export const savePublicKey = async ({ userId, publicKey, keyVersion = 1 }) => {
   if (!publicKey || typeof publicKey !== "string") {
     throw new ValidationError("publicKey is required");

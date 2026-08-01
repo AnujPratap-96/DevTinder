@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
-import User from "../models/user.model.js";
-import Report from "../models/report.js";
+import * as userRepo from "../repositories/user.repository.js";
+import * as reportRepo from "../repositories/report.repository.js";
 import { ValidationError } from "../errors/index.js";
 
 export const blockUser = async ({ userId, targetUserId }) => {
@@ -13,10 +13,10 @@ export const blockUser = async ({ userId, targetUserId }) => {
     throw new ValidationError("You cannot block yourself");
   }
 
-  await User.updateOne(
-    { _id: userId },
+  await userRepo.updateUserById(
+    userId,
     { $addToSet: { blockedUsers: targetUserId } }
-  ).exec();
+  );
 
   return { blockedUserId: targetUserId };
 };
@@ -26,7 +26,7 @@ export const reportUser = async ({ reporterId, reportedUserId, reason, details }
     throw new ValidationError("userId and reason are required");
   }
 
-  const report = await Report.create({
+  const report = await reportRepo.createReport({
     reporterId,
     reportedUserId,
     reason,

@@ -15,6 +15,11 @@ import { userAuth } from "../middlewares/auth.js";
 import upload from "../config/multer.js";
 import validate from "../middlewares/validate.js";
 import { editProfileSchema } from "../validations/user.validation.js";
+import {
+  changePasswordSchema,
+  updateLocationSchema,
+  updateAvailabilitySchema,
+} from "../validations/profile.validation.js";
 
 const router = Router();
 
@@ -25,15 +30,30 @@ router.patch(
   validate(editProfileSchema),
   editProfileController
 );
-router.patch("/profile/password", userAuth, changePasswordController);
+router.patch(
+  "/profile/password",
+  userAuth,
+  validate(changePasswordSchema),
+  changePasswordController
+);
 router.patch(
   "/profile/upload-image",
   userAuth,
   upload.single("image"),
   uploadImageController
 );
-router.patch("/profile/location", userAuth, updateLocationController);
-router.patch("/profile/availability", userAuth, updateAvailabilityController);
+router.patch(
+  "/profile/location",
+  userAuth,
+  validate(updateLocationSchema),
+  updateLocationController
+);
+router.patch(
+  "/profile/availability",
+  userAuth,
+  validate(updateAvailabilitySchema),
+  updateAvailabilityController
+);
 router.get("/profile/views", userAuth, getProfileViewsController);
 router.post("/profile/view/:userId", userAuth, recordProfileViewController);
 router.get("/profile/:userId", userAuth, getUserProfileController);

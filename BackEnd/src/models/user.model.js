@@ -212,6 +212,10 @@ location: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
+    refreshToken: {
+      type: String,
+      default: null,
+    },
     socialLinks: {
       github: { type: String, trim: true },
       linkedin: { type: String, trim: true },
@@ -253,6 +257,18 @@ userSchema.methods.getJWT = async function () {
   }
   const token = await jwt.sign({ _id: user._id }, secret, {
     expiresIn: config.jwt.expiresIn,
+  });
+  return token;
+};
+
+userSchema.methods.getRefreshJWT = async function () {
+  const user = this;
+  const secret = config.jwt.refreshSecret;
+  if (!secret) {
+    throw new Error("JWT refresh secret is not configured");
+  }
+  const token = await jwt.sign({ _id: user._id }, secret, {
+    expiresIn: config.jwt.refreshExpiresIn,
   });
   return token;
 };

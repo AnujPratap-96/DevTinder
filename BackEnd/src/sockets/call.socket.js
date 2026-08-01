@@ -9,12 +9,18 @@ import config from "../config/env.js";
 import logger from "../utils/logger.js";
 import { randomUUID } from "crypto";
 
-const inviteTimeouts = new Map(); // callId -> setTimeout handle
+const inviteTimeouts = new Map();
 
-// Anti-spam limit on placing calls.
 const INVITE_RATE_WINDOW_MS = 30000;
 const INVITE_RATE_MAX = 10;
-const inviteTimestamps = new Map(); // userId -> number[]
+const inviteTimestamps = new Map();
+
+class CallSocketError extends Error {
+  constructor(message, code = "CALL_ERROR") {
+    super(message);
+    this.code = code;
+  }
+}
 
 const isInviteRateLimited = (userId) => {
   const now = Date.now();
@@ -88,8 +94,8 @@ export const initializeCallSocket = (io) => {
         return;
       }
       try {
-        if (!["voice", "video"].includes(type)) throw new Error("Invalid call type");
-        if (!calleeId) throw new Error("calleeId is required");
+        if (!["voice", "video"].includes(type)) throw new CallSocketError("Invalid call type", "VALIDATION_ERROR");
+        if (!calleeId) throw new CallSocketError("calleeId is required", "VALIDATION_ERROR");
 
         await ensureConnection(userId, calleeId);
 
@@ -148,7 +154,7 @@ export const initializeCallSocket = (io) => {
         scheduleMissed(session.callId);
       } catch (err) {
         logger.warn("[call] invite failed from=%s to=%s err=%s", userId, calleeId, err.message);
-        socket.emit("call:error", { message: err.message, code: err.errorCode });
+        socket.emit("call:error", { message: err.message, code: err.code });
       }
     });
 
@@ -158,7 +164,7 @@ export const initializeCallSocket = (io) => {
       try {
         const call = callManager.getCall(callId);
         if (!call || call.calleeId !== userId.toString()) {
-          socket.emit("call:error", { message: "Invalid call" });
+          socket.emit("call:error", { message: "Invalid call", code: "INVALID_CALL" });
           return;
         }
         await callService.acceptCall(callId);
@@ -174,7 +180,7 @@ export const initializeCallSocket = (io) => {
           status: "started",
         });
       } catch (err) {
-        socket.emit("call:error", { message: err.message });
+        socket.emit("call:error", { message: err.message, code: err.code });
       }
     });
 
@@ -188,7 +194,7 @@ export const initializeCallSocket = (io) => {
         clearInviteTimeout(callId);
         emitToUser(call.callerId, "call:decline", { callId });
       } catch (err) {
-        socket.emit("call:error", { message: err.message });
+        socket.emit("call:error", { message: err.message, code: err.code });
       }
     });
 
@@ -238,12 +244,10 @@ export const initializeCallSocket = (io) => {
           });
         }
       } catch (err) {
-        socket.emit("call:error", { message: err.message });
+        socket.emit("call:error", { message: err.message, code: err.code });
       }
     });
 
-    // If a user disconnects mid-call, free them in the call registry and
-    // notify the other party so neither side stays stuck "in a call".
     socket.on("disconnect", () => {
       const userId = socket.data.userId;
       if (!userId) return;

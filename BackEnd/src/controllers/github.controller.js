@@ -4,7 +4,7 @@ import { getGithubProfile, syncGithubProfile } from "../services/github.service.
 
 export const githubProfileController = asyncHandler(async (req, res) => {
   const profile = getGithubProfile(req.user);
-  return successResponse(res, { data: { githubProfile: profile } });
+  return successResponse(res, { message: "GitHub profile fetched", data: { githubProfile: profile } });
 });
 
 export const githubSyncController = asyncHandler(async (req, res) => {
@@ -12,5 +12,5 @@ export const githubSyncController = asyncHandler(async (req, res) => {
     userId: req.user._id,
     accessToken: req.body?.accessToken,
   });
-  return successResponse(res, { data: { githubProfile } });
+  return successResponse(res, { message: "GitHub profile synced", data: { githubProfile } });
 });

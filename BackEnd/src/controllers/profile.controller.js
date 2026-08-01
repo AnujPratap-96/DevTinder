@@ -28,7 +28,7 @@ export const editProfileController = asyncHandler(async (req, res) => {
 export const changePasswordController = asyncHandler(async (req, res) => {
   const { oldpassword, newpassword } = req.body ?? {};
   await changePassword(req.user, { oldPassword: oldpassword, newPassword: newpassword });
-  return successResponse(res, { message: "Password updated successfully" });
+  return successResponse(res, { message: "Password updated successfully", data: { changed: true } });
 });
 
 export const uploadImageController = asyncHandler(async (req, res) => {
@@ -46,7 +46,7 @@ export const uploadImageController = asyncHandler(async (req, res) => {
 
 export const updateLocationController = asyncHandler(async (req, res) => {
   await updateLocation(req.user, req.body ?? {});
-  return successResponse(res, { message: "Location updated" });
+  return successResponse(res, { message: "Location updated", data: { updated: true } });
 });
 
 export const updateAvailabilityController = asyncHandler(async (req, res) => {
@@ -60,17 +60,17 @@ export const updateAvailabilityController = asyncHandler(async (req, res) => {
 
 export const getProfileViewsController = asyncHandler(async (req, res) => {
   const data = await getProfileViews(req.user._id, req.query);
-  return successResponse(res, { data });
+  return successResponse(res, { message: "Profile views fetched", data });
 });
 
 export const recordProfileViewController = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const result = await recordProfileView({ viewerId: req.user._id, viewedUserId: userId });
-  return successResponse(res, { message: "View recorded", data: result });
+  return successResponse(res, { message: "View recorded", data: { view: result } });
 });
 
 export const getUserProfileController = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const profile = await getUserProfile({ userId, viewerId: req.user._id });
-  return successResponse(res, { data: { profile } });
+  return successResponse(res, { message: "Profile fetched", data: { profile } });
 });

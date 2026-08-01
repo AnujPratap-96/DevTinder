@@ -40,5 +40,13 @@ export const createNotification = (payload) => Notification.create(payload);
 export const deleteNotificationById = (notificationId, userId) =>
   Notification.findOneAndDelete({ _id: notificationId, userId }).exec();
 
+export const updateNotifications = (userId, notificationIds = [], updates) => {
+  const query = { userId };
+  if (notificationIds?.length) {
+    query._id = { $in: notificationIds };
+  }
+  return Notification.updateMany(query, { $set: updates }).exec();
+};
+
 export const deleteAllNotifications = (userId) =>
   Notification.deleteMany({ userId }).exec();

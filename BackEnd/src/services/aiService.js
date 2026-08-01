@@ -1,25 +1,19 @@
-/**
- * aiService.js
- * Centralised Mistral AI integration.  All prompt-engineering and API calls
- * live here so routes / controllers stay clean and testable.
- */
-
 import axios from "axios";
 import config from "../config/env.js";
+import { AppError, ValidationError } from "../errors/index.js";
 
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 const MODEL = "mistral-small-latest";
 
-// ─────────────────────────────────────────────────────────────
-// Helper: call Mistral with a timeout
-// ─────────────────────────────────────────────────────────────
 const callMistral = async (messages, { temperature = 0.7, maxTokens = 400 } = {}) => {
   const apiKey = config.ai.mistralApiKey;
 
-  if (!apiKey) throw new Error("MISTRAL_API_KEY is not configured in ENV");
+  if (!apiKey) {
+    throw new AppError({ message: "AI service is not configured", statusCode: 500, errorCode: "AI_CONFIG_ERROR" });
+  }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000); // 15 s timeout
+  const timeout = setTimeout(() => controller.abort(), 15_000);
 
   try {
     const response = await fetch(MISTRAL_API_URL, {
@@ -39,26 +33,30 @@ const callMistral = async (messages, { temperature = 0.7, maxTokens = 400 } = {}
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`Mistral API error ${response.status}: ${errorBody}`);
+      throw new AppError({
+        message: "AI service request failed",
+        statusCode: 502,
+        errorCode: "AI_API_ERROR",
+        details: { status: response.status, body: errorBody },
+      });
     }
 
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content?.trim();
 
-    if (!content) throw new Error("Empty response from AI");
+    if (!content) {
+      throw new AppError({ message: "AI returned empty response", statusCode: 502, errorCode: "AI_EMPTY_RESPONSE" });
+    }
     return content;
   } finally {
     clearTimeout(timeout);
   }
 };
 
-// ─────────────────────────────────────────────────────────────
-// Helper: sanitise string inputs
-// ─────────────────────────────────────────────────────────────
 const sanitise = (value) =>
   String(value ?? "")
     .trim()
-    .replace(/[<>]/g, "") // strip potential HTML
+    .replace(/[<>]/g, "")
     .slice(0, 500);
 
 const sanitiseArray = (arr) =>
@@ -67,9 +65,6 @@ const sanitiseArray = (arr) =>
     .filter(Boolean)
     .slice(0, 30);
 
-// ─────────────────────────────────────────────────────────────
-// 1. AI Profile Bio Generator
-// ─────────────────────────────────────────────────────────────
 const generateBio = async ({ skills, experienceYears, role, interests }) => {
   const skillsText = sanitiseArray(skills).join(", ") || "various technologies";
   const exp = sanitise(String(experienceYears ?? 0));
@@ -103,9 +98,6 @@ const generateBio = async ({ skills, experienceYears, role, interests }) => {
   return bio;
 };
 
-// ─────────────────────────────────────────────────────────────
-// 2. AI Skill Suggestions
-// ─────────────────────────────────────────────────────────────
 const suggestSkills = async ({ currentSkills, role, about }) => {
   const skillsText = sanitiseArray(currentSkills).join(", ") || "general programming";
   const roleText = sanitise(role) || "software developer";
@@ -135,14 +127,16 @@ const suggestSkills = async ({ currentSkills, role, about }) => {
 
   const raw = await callMistral(messages, { temperature: 0.5, maxTokens: 200 });
 
-  // Robustly extract JSON array from the response
   const match = raw.match(/\[[\s\S]*?\]/);
-  if (!match) throw new Error("AI returned malformed skill list");
+  if (!match) {
+    throw new AppError({ message: "Failed to parse AI skill suggestions", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
+  }
 
   const parsed = JSON.parse(match[0]);
-  if (!Array.isArray(parsed)) throw new Error("AI skill list is not an array");
+  if (!Array.isArray(parsed)) {
+    throw new AppError({ message: "AI returned invalid skill list format", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
+  }
 
-  // Deduplicate against existing skills (case-insensitive)
   const existing = new Set(sanitiseArray(currentSkills).map((s) => s.toLowerCase()));
   const suggestions = parsed
     .map((s) => String(s).trim())
@@ -152,9 +146,6 @@ const suggestSkills = async ({ currentSkills, role, about }) => {
   return suggestions;
 };
 
-// ─────────────────────────────────────────────────────────────
-// 3. AI Chat Icebreaker
-// ─────────────────────────────────────────────────────────────
 const generateIcebreaker = async ({ sender, receiver }) => {
   const senderSkills = sanitiseArray(sender?.skills).join(", ") || "various tech";
   const receiverSkills = sanitiseArray(receiver?.skills).join(", ") || "various tech";
@@ -187,9 +178,6 @@ const generateIcebreaker = async ({ sender, receiver }) => {
   return message;
 };
 
-// ─────────────────────────────────────────────────────────────
-// 4. AI Match Explanation
-// ─────────────────────────────────────────────────────────────
 const explainMatch = async ({ userA, userB }) => {
   const skillsA = sanitiseArray(userA?.skills).join(", ") || "various tech";
   const skillsB = sanitiseArray(userB?.skills).join(", ") || "various tech";
@@ -221,19 +209,19 @@ const explainMatch = async ({ userA, userB }) => {
 
   const raw = await callMistral(messages, { temperature: 0.6, maxTokens: 250 });
 
-  // Extract JSON robustly
   const match = raw.match(/\{[\s\S]*?\}/);
-  if (!match) throw new Error("AI returned malformed match explanation");
+  if (!match) {
+    throw new AppError({ message: "Failed to parse AI match explanation", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
+  }
 
   const parsed = JSON.parse(match[0]);
-  if (!Array.isArray(parsed?.points)) throw new Error("AI match explanation missing 'points' array");
+  if (!Array.isArray(parsed?.points)) {
+    throw new AppError({ message: "AI returned invalid match format", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
+  }
 
   return parsed.points.slice(0, 4);
 };
 
-// ─────────────────────────────────────────────────────────────
-// 5. AI Project Description Generator
-// ─────────────────────────────────────────────────────────────
 const generateProjectDescription = async ({ title, techStack }) => {
   const titleText = sanitise(title) || "New Tech Project";
   const techText = sanitiseArray(techStack).join(", ") || "various technologies";
@@ -264,9 +252,6 @@ const generateProjectDescription = async ({ title, techStack }) => {
   return description;
 };
 
-// ─────────────────────────────────────────────────────────────
-// 6. AI Project Tech Stack Suggestions
-// ─────────────────────────────────────────────────────────────
 const suggestProjectTechStack = async ({ title, description }) => {
   const titleText = sanitise(title) || "New Tech Project";
   const descText = sanitise(description) || "";
@@ -295,17 +280,18 @@ const suggestProjectTechStack = async ({ title, description }) => {
   const raw = await callMistral(messages, { temperature: 0.6, maxTokens: 200 });
 
   const match = raw.match(/\[[\s\S]*?\]/);
-  if (!match) throw new Error("AI returned malformed tech stack list");
+  if (!match) {
+    throw new AppError({ message: "Failed to parse AI tech stack suggestions", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
+  }
 
   const parsed = JSON.parse(match[0]);
-  if (!Array.isArray(parsed)) throw new Error("AI tech stack list is not an array");
+  if (!Array.isArray(parsed)) {
+    throw new AppError({ message: "AI returned invalid tech stack format", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
+  }
 
   return parsed.slice(0, 10);
 };
 
-// ─────────────────────────────────────────────────────────────
-// 7. AI Project Roadmap Generator
-// ─────────────────────────────────────────────────────────────
 const generateProjectRoadmap = async ({ title, description, techStack }) => {
   const titleText = sanitise(title) || "New Tech Project";
   const descText = sanitise(description) || "";
@@ -337,7 +323,6 @@ const generateProjectRoadmap = async ({ title, description, techStack }) => {
 
   let jsonStr = raw.trim();
   
-  // Strip markdown code blocks if present
   if (jsonStr.startsWith("```")) {
     const lines = jsonStr.split("\n");
     if (lines[0].startsWith("```")) lines.shift();
@@ -345,14 +330,12 @@ const generateProjectRoadmap = async ({ title, description, techStack }) => {
     jsonStr = lines.join("\n").trim();
   }
 
-  // Fallback to substring extraction if it still doesn't look like JSON
   if (!jsonStr.startsWith("{") && !jsonStr.startsWith("[")) {
     const firstBrace = raw.indexOf("{");
     const lastBrace = raw.lastIndexOf("}");
     const firstBracket = raw.indexOf("[");
     const lastBracket = raw.lastIndexOf("]");
     
-    // Choose the outer wrapper (whichever starts earlier and ends later)
     if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
       jsonStr = raw.substring(firstBrace, lastBrace + 1);
     } else if (firstBracket !== -1) {
@@ -363,27 +346,25 @@ const generateProjectRoadmap = async ({ title, description, techStack }) => {
   try {
     const parsed = JSON.parse(jsonStr);
     
-    // Handle both {"phases": [...]} and [...] formats
     const phasesArray = Array.isArray(parsed) ? parsed : parsed?.phases;
     
     if (!Array.isArray(phasesArray)) {
-      throw new Error("AI roadmap missing phases array");
+      throw new AppError({ message: "AI returned invalid roadmap format", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
     }
     
     return phasesArray;
   } catch (err) {
+    if (err instanceof AppError) throw err;
     console.error("AI Roadmap JSON error:", err, "Raw response:", raw);
-    throw new Error("AI returned malformed roadmap data. Please try again.");
+    throw new AppError({ message: "AI returned malformed roadmap data. Please try again.", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
   }
 };
 
-// ─────────────────────────────────────────────────────────────
-// 8. GitHub Bio Sync
-// ─────────────────────────────────────────────────────────────
 const syncGitHubData = async (githubUsername, githubToken = null) => {
-  if (!githubUsername) throw new Error("GitHub username is required");
+  if (!githubUsername) {
+    throw new AppError({ message: "GitHub username is required", statusCode: 400, errorCode: "VALIDATION_ERROR" });
+  }
 
-  // Fetch repositories from GitHub API (Authenticated if token provided)
   const headers = {};
   if (githubToken) {
     headers.Authorization = `token ${githubToken}`;
@@ -419,15 +400,16 @@ const syncGitHubData = async (githubUsername, githubToken = null) => {
   ];
 
   const raw = await callMistral(messages, { temperature: 0.5 });
-  const match = raw.match(/\{[\s\S]*?\}/);
-  if (!match) throw new Error("AI returned malformed GitHub sync JSON");
 
-  return JSON.parse(match[0]);
+  let jsonStr = raw.trim();
+  const braceMatch = jsonStr.match(/\{[\s\S]*?\}/);
+  if (!braceMatch) {
+    throw new AppError({ message: "Failed to parse AI GitHub sync response", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
+  }
+
+  return JSON.parse(braceMatch[0]);
 };
 
-// ─────────────────────────────────────────────────────────────
-// 9. AI Collaboration Suggestion (Coding Date)
-// ─────────────────────────────────────────────────────────────
 const suggestCollaborationActivity = async ({ userA, userB }) => {
   const skillsA = sanitiseArray(userA?.skills).join(", ") || "various tech";
   const skillsB = sanitiseArray(userB?.skills).join(", ") || "various tech";
@@ -456,15 +438,16 @@ const suggestCollaborationActivity = async ({ userA, userB }) => {
   ];
 
   const raw = await callMistral(messages, { temperature: 0.8, maxTokens: 300 });
-  const match = raw.match(/\{[\s\S]*?\}/);
-  if (!match) throw new Error("AI returned malformed collaboration suggestion");
 
-  return JSON.parse(match[0]);
+  let jsonStr = raw.trim();
+  const braceMatch = jsonStr.match(/\{[\s\S]*?\}/);
+  if (!braceMatch) {
+    throw new AppError({ message: "Failed to parse AI collaboration suggestion", statusCode: 502, errorCode: "AI_PARSE_ERROR" });
+  }
+
+  return JSON.parse(braceMatch[0]);
 };
 
-// ─────────────────────────────────────────────────────────────
-// Exports
-// ─────────────────────────────────────────────────────────────
 export {
   generateBio,
   suggestSkills,

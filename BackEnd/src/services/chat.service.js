@@ -4,45 +4,21 @@ import uploadImageCloudinary from "../utils/cloudinary.js";
 import { getIO } from "../utils/socket.js";
 import * as chatRepo from "../repositories/chat.repository.js";
 
-const ensureConnection = async (userId, targetUserId) => {
-  const isConnection = await ConnectionRequest.findOne({
-    $or: [
-      { fromUserId: userId, toUserId: targetUserId, status: "accepted" },
-      { toUserId: userId, fromUserId: targetUserId, status: "accepted" },
-    ],
-  }).lean();
-  if (!isConnection) {
-    throw new AppError({ message: "You are not connected with this user", statusCode: 403 });
-  }
-};
-
-const ensureParticipant = async (matchId, userId) => {
-  const chat = await Chat.findById(matchId).lean();
-  if (!chat) {
-    throw new NotFoundError("Conversation");
-  }
-  const isParticipant = chat.participants.some((participant) => participant.toString() === userId.toString());
-  if (!isParticipant) {
-    throw new AppError({ message: "You are not part of this conversation", statusCode: 403 });
-  }
-  return chat;
-};
-
 export const getChatWithUser = async ({ userId, targetUserId, limit = 20, cursor = null }) => {
   if (!userId || !targetUserId) {
     throw new ValidationError("userId and targetUserId are required");
   }
 
-  await ensureConnection(userId, targetUserId);
+  const isConnected = await chatRepo.ensureConnection(userId, targetUserId);
+  if (!isConnected) {
+    throw new AppError({ message: "You are not connected with this user", statusCode: 403 });
+  }
 
-  const chat = await Chat.findOrCreateByParticipants(userId, targetUserId);
+  const chat = await chatRepo.findOrCreateChat(userId, targetUserId);
   const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
   const filter = { matchId: chat._id };
   if (cursor) filter._id = { $lt: cursor };
-  const docs = await Message.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(pageSize + 1)
-    .lean();
+  const docs = await chatRepo.findMessages(filter, { limit: pageSize, sort: { createdAt: -1 } });
   const hasMore = docs.length > pageSize;
   const messages = hasMore ? docs.slice(0, pageSize) : docs;
   const nextCursor = hasMore ? messages[messages.length - 1]._id : null;
@@ -60,14 +36,19 @@ export const getChatWithUser = async ({ userId, targetUserId, limit = 20, cursor
 };
 
 export const listChatMessages = async ({ matchId, userId, limit = 20, cursor = null }) => {
-  await ensureParticipant(matchId, userId);
+  const chat = await chatRepo.findChatByIdLean(matchId);
+  if (!chat) {
+    throw new NotFoundError("Conversation");
+  }
+  const isParticipant = chat.participants.some((participant) => participant.toString() === userId.toString());
+  if (!isParticipant) {
+    throw new AppError({ message: "You are not part of this conversation", statusCode: 403 });
+  }
+
   const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
   const filter = { matchId };
   if (cursor) filter._id = { $lt: cursor };
-  const docs = await Message.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(pageSize + 1)
-    .lean();
+  const docs = await chatRepo.findMessages(filter, { limit: pageSize, sort: { createdAt: -1 } });
   const hasMore = docs.length > pageSize;
   const messages = hasMore ? docs.slice(0, pageSize) : docs;
   const nextCursor = hasMore ? messages[messages.length - 1]._id : null;
@@ -84,12 +65,16 @@ export const markMessagesSeenService = async ({ matchId, userId }) => {
     throw new ValidationError("matchId is required");
   }
 
-  await ensureParticipant(matchId, userId);
+  const chat = await chatRepo.findChatByIdLean(matchId);
+  if (!chat) {
+    throw new NotFoundError("Conversation");
+  }
+  const isParticipant = chat.participants.some((participant) => participant.toString() === userId.toString());
+  if (!isParticipant) {
+    throw new AppError({ message: "You are not part of this conversation", statusCode: 403 });
+  }
 
-  const result = await Message.markAsSeen({ matchId, receiverId: userId });
-
-  const unreadResetKey = `unreadCounts.${userId}`;
-  await Chat.findByIdAndUpdate(matchId, { $set: { [unreadResetKey]: 0 } });
+  const result = await chatRepo.markMessagesAsSeen({ matchId, receiverId: userId });
 
   return { updated: result.modifiedCount ?? result.nModified ?? 0 };
 };
@@ -99,7 +84,7 @@ export const deleteMessageService = async ({ messageId, userId }) => {
     throw new ValidationError("messageId is required");
   }
 
-  const message = await Message.findById(messageId);
+  const message = await chatRepo.findMessageById(messageId);
   if (!message) {
     throw new NotFoundError("Message");
   }
@@ -108,7 +93,7 @@ export const deleteMessageService = async ({ messageId, userId }) => {
     throw new AppError({ message: "You can only delete your own messages", statusCode: 403 });
   }
 
-  await Message.findByIdAndDelete(messageId);
+  await chatRepo.deleteMessageById(messageId);
   return message;
 };
 

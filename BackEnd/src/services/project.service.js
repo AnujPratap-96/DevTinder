@@ -1,18 +1,25 @@
 import mongoose from "mongoose";
 
-import Project from "../models/project.js";
+import * as projectRepo from "../repositories/project.repository.js";
 import { createNotificationAndNotify } from "../utils/notify.js";
-import { AppError, ValidationError } from "../errors/index.js";
+import { AppError, ValidationError, NotFoundError } from "../errors/index.js";
 
 const getMemberUserId = (member) => (typeof member === "object" ? member?.userId : member);
 const getRequestUserId = (req) => (typeof req?.userId === "object" ? req?.userId : req?.userId);
+
+const POPULATE_OWNER = { path: "ownerId", select: "firstName lastName photoUrl role" };
+const POPULATE_MEMBERS = { path: "members.userId", select: "firstName lastName photoUrl role" };
+const POPULATE_JOIN_REQUESTS = { path: "joinRequests.userId", select: "firstName lastName photoUrl" };
+const POPULATE_MESSAGES = { path: "messages.senderId", select: "firstName lastName photoUrl" };
+
+const PROJECT_POPULATE = [POPULATE_OWNER, POPULATE_MEMBERS, POPULATE_JOIN_REQUESTS];
 
 export const createProject = async ({ ownerId, title, description, techStack }) => {
   if (!title || !description) {
     throw new ValidationError("title and description are required");
   }
 
-  const project = await Project.create({
+  const project = await projectRepo.createProject({
     title,
     description,
     techStack: techStack || [],
@@ -25,6 +32,27 @@ export const createProject = async ({ ownerId, title, description, techStack }) 
   return project;
 };
 
+const transformProject = (project, userId) => {
+  const isMember = project.members?.some(
+    (m) => getMemberUserId(m)?.toString() === userId.toString()
+  );
+  const hasPendingRequest = project.joinRequests?.some(
+    (r) => getRequestUserId(r)?.toString() === userId.toString() && r.status === "pending"
+  );
+  const transformedJoinRequests = project.joinRequests?.map((r) => ({
+    _id: r._id,
+    user: r.userId,
+    status: r.status,
+    requestedAt: r.requestedAt,
+  })) || [];
+  return {
+    ...project,
+    joinRequests: transformedJoinRequests,
+    isMember: !!isMember,
+    hasPendingRequest: !!hasPendingRequest,
+  };
+};
+
 export const listProjects = async ({ status, userId, limit = 20, cursor = null }) => {
   const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
   const filter = {};
@@ -33,38 +61,11 @@ export const listProjects = async ({ status, userId, limit = 20, cursor = null }
   }
   if (cursor) filter._id = { $lt: cursor };
 
-  const docs = await Project.find(filter)
-    .populate("ownerId", "firstName lastName photoUrl role")
-    .populate("members.userId", "firstName lastName photoUrl role")
-    .populate("joinRequests.userId", "firstName lastName photoUrl")
-    .sort({ createdAt: -1 })
-    .limit(pageSize + 1)
-    .lean();
+  const docs = await projectRepo.findAndPopulateProjects(filter, PROJECT_POPULATE, { limit: pageSize, cursor, sort: { createdAt: -1 } });
 
   const hasMore = docs.length > pageSize;
   const projects = hasMore ? docs.slice(0, pageSize) : docs;
-
-  const mapped = projects.map((project) => {
-    const isMember = project.members?.some(
-      (m) => getMemberUserId(m)?.toString() === userId.toString()
-    );
-    const hasPendingRequest = project.joinRequests?.some(
-      (r) => getRequestUserId(r)?.toString() === userId.toString() && r.status === "pending"
-    );
-    const transformedJoinRequests = project.joinRequests?.map((r) => ({
-      _id: r._id,
-      user: r.userId,
-      status: r.status,
-      requestedAt: r.requestedAt,
-    })) || [];
-    return {
-      ...project,
-      joinRequests: transformedJoinRequests,
-      isMember: !!isMember,
-      hasPendingRequest: !!hasPendingRequest,
-    };
-  });
-
+  const mapped = projects.map((project) => transformProject(project, userId));
   const nextCursor = hasMore ? projects[projects.length - 1]._id : null;
   return { projects: mapped, nextCursor, hasMore };
 };
@@ -73,12 +74,7 @@ export const listMyProjects = async (userId, { limit = 20, cursor = null } = {})
   const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
   const filter = { "members.userId": userId };
   if (cursor) filter._id = { $lt: cursor };
-  const docs = await Project.find(filter)
-    .populate("ownerId", "firstName lastName photoUrl role")
-    .populate("members.userId", "firstName lastName photoUrl role")
-    .sort({ createdAt: -1 })
-    .limit(pageSize + 1)
-    .lean();
+  const docs = await projectRepo.findAndPopulateProjects(filter, [POPULATE_OWNER, POPULATE_MEMBERS], { limit: pageSize, cursor, sort: { createdAt: -1 } });
   const hasMore = docs.length > pageSize;
   const projects = hasMore ? docs.slice(0, pageSize) : docs;
   const nextCursor = hasMore ? projects[projects.length - 1]._id : null;
@@ -90,7 +86,7 @@ export const requestProjectJoin = async ({ projectId, userId }) => {
     throw new ValidationError("Valid projectId is required");
   }
 
-  const project = await Project.findById(projectId);
+  const project = await projectRepo.findProjectById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
   }
@@ -105,7 +101,7 @@ export const requestProjectJoin = async ({ projectId, userId }) => {
 
   project.joinRequests = project.joinRequests || [];
   project.joinRequests.push({ userId, status: "pending" });
-  await project.save();
+  await projectRepo.saveProject(project);
 
   await createNotificationAndNotify({
     userId: project.ownerId,
@@ -119,7 +115,7 @@ export const requestProjectJoin = async ({ projectId, userId }) => {
 };
 
 export const listProjectRequests = async ({ projectId, userId }) => {
-  const project = await Project.findById(projectId);
+  const project = await projectRepo.findProjectById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
   }
@@ -129,10 +125,7 @@ export const listProjectRequests = async ({ projectId, userId }) => {
     throw new AppError({ message: "Only owners/admins can view requests", statusCode: 403 });
   }
 
-  await Project.populate(project, {
-    path: "joinRequests.userId",
-    select: "firstName lastName photoUrl role",
-  });
+  await project.populate("joinRequests.userId", "firstName lastName photoUrl role");
 
   const requests = project.joinRequests
     .filter((r) => r.status === "pending")
@@ -154,7 +147,7 @@ export const respondToProjectRequest = async ({ projectId, requestId, action, us
     throw new ValidationError("action must be accept or reject");
   }
 
-  const project = await Project.findById(projectId);
+  const project = await projectRepo.findProjectById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
   }
@@ -196,10 +189,10 @@ export const respondToProjectRequest = async ({ projectId, requestId, action, us
     });
   }
 
-  await project.save();
+  await projectRepo.saveProject(project);
 
   project.joinRequests = project.joinRequests.filter((r) => r._id.toString() !== requestId);
-  await project.save();
+  await projectRepo.saveProject(project);
   await project.populate("ownerId", "firstName lastName photoUrl");
   await project.populate("members.userId", "firstName lastName photoUrl role");
 
@@ -207,7 +200,7 @@ export const respondToProjectRequest = async ({ projectId, requestId, action, us
 };
 
 export const removeProjectMember = async ({ projectId, memberId, userId }) => {
-  const project = await Project.findById(projectId);
+  const project = await projectRepo.findProjectById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
   }
@@ -236,7 +229,7 @@ export const removeProjectMember = async ({ projectId, memberId, userId }) => {
   }
 
   project.members.splice(memberIndex, 1);
-  await project.save();
+  await projectRepo.saveProject(project);
 
   await createNotificationAndNotify({
     userId: member.userId,
@@ -251,10 +244,11 @@ export const removeProjectMember = async ({ projectId, memberId, userId }) => {
 };
 
 export const getProjectDetails = async ({ projectId, userId }) => {
-  const project = await Project.findById(projectId)
-    .populate("ownerId", "firstName lastName photoUrl role githubProfile")
-    .populate("members.userId", "firstName lastName photoUrl role availability")
-    .populate("joinRequests.userId", "firstName lastName photoUrl");
+  const project = await projectRepo.findAndPopulateProject(projectId, [
+    POPULATE_OWNER,
+    POPULATE_MEMBERS,
+    POPULATE_JOIN_REQUESTS,
+  ]);
 
   if (!project) {
     throw new NotFoundError("Project");
@@ -290,7 +284,7 @@ export const addProjectMessage = async ({ projectId, userId, message, mentions }
     throw new ValidationError("message is required");
   }
 
-  const project = await Project.findById(projectId);
+  const project = await projectRepo.findProjectById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
   }
@@ -306,7 +300,7 @@ export const addProjectMessage = async ({ projectId, userId, message, mentions }
   };
 
   project.messages.push(newMessage);
-  await project.save();
+  await projectRepo.saveProject(project);
 
   await project.populate("messages.senderId", "firstName lastName photoUrl");
   const addedMessage = project.messages[project.messages.length - 1];
@@ -331,7 +325,7 @@ export const addProjectMessage = async ({ projectId, userId, message, mentions }
 };
 
 export const listProjectMessages = async ({ projectId, userId, limit = 50, cursor = null }) => {
-  const project = await Project.findById(projectId);
+  const project = await projectRepo.findProjectById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
   }
@@ -368,12 +362,12 @@ export const deleteAllProjects = async ({ user }) => {
   if (!user.isAdmin) {
     throw new AppError({ message: "Admin only", statusCode: 403 });
   }
-  const result = await Project.deleteMany({});
+  const result = await projectRepo.deleteAllProjects();
   return { deleted: result.deletedCount };
 };
 
 export const updateProject = async ({ projectId, userId, title, description, techStack, status }) => {
-  const project = await Project.findById(projectId);
+  const project = await projectRepo.findProjectById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
   }
@@ -388,12 +382,12 @@ export const updateProject = async ({ projectId, userId, title, description, tec
   if (techStack) project.techStack = techStack;
   if (status) project.status = status;
 
-  await project.save();
+  await projectRepo.saveProject(project);
   return project;
 };
 
 export const deleteProject = async ({ projectId, userId }) => {
-  const project = await Project.findById(projectId);
+  const project = await projectRepo.findProjectById(projectId);
   if (!project) {
     throw new NotFoundError("Project");
   }
@@ -403,7 +397,7 @@ export const deleteProject = async ({ projectId, userId }) => {
     throw new AppError({ message: "Access denied. Only owner or admin can delete the project.", statusCode: 403 });
   }
 
-  await Project.findByIdAndDelete(projectId);
+  await projectRepo.deleteProjectById(projectId);
   return { message: "Project deleted successfully" };
 };
 

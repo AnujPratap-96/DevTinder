@@ -9,11 +9,19 @@ import {
   completeSignupController,
   loginController,
   oauthLoginController,
+  refreshTokenController,
   logoutController,
 } from "../controllers/auth.controller.js";
 import { verifySignJWT } from "../middlewares/signupauth.js";
 import validate from "../middlewares/validate.js";
 import { signupSchema, loginSchema } from "../validations/user.validation.js";
+import {
+  sendOtpSchema,
+  verifyOtpSchema,
+  resetPasswordSchema,
+  registerSchema,
+  oauthLoginSchema,
+} from "../validations/auth.validation.js";
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -30,11 +38,11 @@ const otpRateLimiter = rateLimit({
 
 const router = Router();
 
-router.post("/send-otp", otpRateLimiter, sendOtpController);
-router.post("/verify-otp", authLimiter, verifyOtpController);
-router.post("/reset-password", authLimiter, resetPasswordController);
+router.post("/send-otp", otpRateLimiter, validate(sendOtpSchema), sendOtpController);
+router.post("/verify-otp", authLimiter, validate(verifyOtpSchema), verifyOtpController);
+router.post("/reset-password", authLimiter, validate(resetPasswordSchema), resetPasswordController);
 
-router.post("/register", authLimiter, registerController);
+router.post("/register", authLimiter, validate(registerSchema), registerController);
 router.post(
   "/complete-signup",
   authLimiter,
@@ -44,7 +52,8 @@ router.post(
 );
 
 router.post("/login", authLimiter, validate(loginSchema), loginController);
-router.post("/auth/oauth", authLimiter, oauthLoginController);
+router.post("/auth/oauth", authLimiter, validate(oauthLoginSchema), oauthLoginController);
+router.post("/refresh-token", authLimiter, refreshTokenController);
 router.post("/logout", authLimiter, logoutController);
 
 export default router;

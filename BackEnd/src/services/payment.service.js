@@ -1,6 +1,6 @@
-import Payment from "../models/payment.js";
-import User from "../models/user.model.js";
-import Plan from "../models/plan.js";
+import * as paymentRepo from "../repositories/payment.repository.js";
+import * as userRepo from "../repositories/user.repository.js";
+import * as planRepo from "../repositories/plan.repository.js";
 import config from "../config/env.js";
 import razorpayInstance from "../utils/razorpay.js";
 import { AppError, ValidationError } from "../errors/index.js";
@@ -12,7 +12,7 @@ export const createPaymentOrder = async ({ user, membershipType }) => {
   }
 
   const slug = String(membershipType).toLowerCase();
-  const plan = await Plan.findOne({ slug, isActive: true });
+  const plan = await planRepo.findPlan({ slug, isActive: true });
   if (!plan) {
     throw new ValidationError("Invalid or inactive membership plan");
   }
@@ -32,7 +32,7 @@ export const createPaymentOrder = async ({ user, membershipType }) => {
     },
   });
 
-  const payment = await Payment.create({
+  const payment = await paymentRepo.createPayment({
     userId: user._id,
     orderId: order.id,
     status: order.status,
@@ -46,9 +46,9 @@ export const createPaymentOrder = async ({ user, membershipType }) => {
 };
 
 const applyMembership = async (userId, slug) => {
-  const user = await User.findById(userId);
+  const user = await userRepo.findUserById(userId);
   if (!user) return null;
-  const plan = slug ? await Plan.findOne({ slug }) : null;
+  const plan = slug ? await planRepo.findPlan({ slug }) : null;
   user.membershipType = slug || "free";
   user.planId = plan?._id ?? null;
   user.isPremium = Boolean(plan && !plan.isFree);
@@ -59,7 +59,7 @@ const applyMembership = async (userId, slug) => {
   } else {
     user.membershipExpiresAt = null;
   }
-  await user.save();
+  await userRepo.saveUser(user);
   return user;
 };
 
@@ -80,12 +80,11 @@ export const handleWebhook = async ({ signature, body }) => {
   const event = payload?.event;
   const paymentEntity = payload?.payload?.payment?.entity;
   if (!paymentEntity) {
-    // Non-payment event (e.g. refund, dispute) — acknowledge so Razorpay stops retrying.
     console.log(`[webhook] Ignored non-payment event: ${event}`);
     return { status: "ignored", event };
   }
 
-  const payment = await Payment.findOne({ orderId: paymentEntity.order_id });
+  const payment = await paymentRepo.findPayment({ orderId: paymentEntity.order_id });
   if (!payment) {
     throw new AppError({ message: "Payment record not found", statusCode: 404 });
   }

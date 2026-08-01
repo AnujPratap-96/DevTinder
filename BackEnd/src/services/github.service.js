@@ -1,4 +1,4 @@
-import User from "../models/user.model.js";
+import * as userRepo from "../repositories/user.repository.js";
 import { ValidationError, AppError } from "../errors/index.js";
 
 const GITHUB_USER_URL = "https://api.github.com/user";
@@ -70,7 +70,7 @@ export const syncGithubProfile = async ({ userId, accessToken }) => {
     updatedAt: repo.updated_at,
   }));
 
-  const user = await User.findById(userId);
+  const user = await userRepo.findUserById(userId);
   if (!user) {
     throw new AppError({ message: "User not found", statusCode: 404 });
   }
@@ -91,7 +91,7 @@ export const syncGithubProfile = async ({ userId, accessToken }) => {
   }
 
   user.calculateProfileStrength();
-  await user.save();
+  await userRepo.saveUser(user);
 
   return user.githubProfile;
 };

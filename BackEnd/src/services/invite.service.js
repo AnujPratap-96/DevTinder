@@ -1,6 +1,5 @@
-import Invite from "../models/invite.js";
 import * as inviteRepo from "../repositories/invite.repository.js";
-import User from "../models/user.model.js";
+import * as userRepo from "../repositories/user.repository.js";
 import { run as sendEmail } from "../utils/sendEmail.js";
 import { inviteEmailTemplate } from "../utils/emailTemplates/templates.js";
 import { emitToUser } from "../utils/socket.js";
@@ -9,14 +8,14 @@ import { getPlanLimits } from "../utils/planConfig.js";
 import { checkMonthlyUsage } from "../utils/usage.js";
 
 export const sendInvite = async ({ userId, email }) => {
-  const user = await User.findById(userId);
+  const user = await userRepo.findUserById(userId);
   if (!user) throw new AppError({ message: "User not found", statusCode: 404 });
 
   if (user.emailId.toLowerCase() === email.toLowerCase()) {
     throw new ValidationError("You cannot invite yourself");
   }
 
-  const existingUser = await User.findOne({ emailId: email.toLowerCase() });
+  const existingUser = await userRepo.findUserByEmail(email.toLowerCase());
   if (existingUser) {
     throw new ValidationError("This person is already on DevTinder");
   }
@@ -51,7 +50,7 @@ export const sendInvite = async ({ userId, email }) => {
 export const getStats = async (userId) => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const user = await User.findById(userId).select("membershipType").lean();
+  const user = await userRepo.findUserById(userId).select("membershipType").lean();
 
   const [totalSent, pendingCount, acceptedCount] = await Promise.all([
     inviteRepo.countInvites({
@@ -65,12 +64,12 @@ export const getStats = async (userId) => {
 
   const planLimits = await getPlanLimits(user?.membershipType || "free");
   const rawLimit = planLimits.invitesPerMonth;
-  const limit = rawLimit === null || rawLimit === undefined ? Infinity : rawLimit;
+  const limit = rawLimit === null || rawLimit === undefined ? null : rawLimit;
 
   return {
     totalSent,
-    remaining: Math.max(0, limit - totalSent),
-    limit: rawLimit,
+    remaining: limit === null ? null : Math.max(0, limit - totalSent),
+    limit,
     pending: pendingCount,
     accepted: acceptedCount,
   };

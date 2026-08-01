@@ -1,5 +1,6 @@
 import { getPlanLimits } from "../utils/planConfig.js";
 import { checkMonthlyUsage } from "../utils/usage.js";
+import { AppError } from "../errors/index.js";
 
 export const inviteDailyLimit = async (req, res, next) => {
   try {
@@ -12,12 +13,11 @@ export const inviteDailyLimit = async (req, res, next) => {
 
     const { allowed, remaining } = await checkMonthlyUsage(req.user, "invitesSent", limit);
     if (!allowed) {
-      return res.status(429).json({
-        success: false,
+      return next(new AppError({
         message: "You've used all invites included in your plan. Upgrade to send more invitations.",
-        error: "INVITE_LIMIT_REACHED",
-        remaining: 0,
-      });
+        statusCode: 429,
+        errorCode: "INVITE_LIMIT_REACHED",
+      }));
     }
 
     req.inviteRemaining = remaining;

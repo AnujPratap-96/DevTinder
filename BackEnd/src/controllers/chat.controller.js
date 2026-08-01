@@ -15,7 +15,7 @@ export const getChatController = asyncHandler(async (req, res) => {
     limit: req.query.limit,
     cursor: req.query.cursor,
   });
-  return successResponse(res, { data });
+  return successResponse(res, { message: "Chat fetched", data });
 });
 
 export const listMessagesController = asyncHandler(async (req, res) => {
@@ -25,7 +25,7 @@ export const listMessagesController = asyncHandler(async (req, res) => {
     limit: req.query.limit,
     cursor: req.query.cursor,
   });
-  return successResponse(res, { data });
+  return successResponse(res, { message: "Messages fetched", data });
 });
 
 export const markMessagesSeenController = asyncHandler(async (req, res) => {
@@ -33,15 +33,15 @@ export const markMessagesSeenController = asyncHandler(async (req, res) => {
     matchId: req.body?.matchId,
     userId: req.user._id,
   });
-  return successResponse(res, { data: result });
+  return successResponse(res, { message: "Messages marked as seen", data: { result } });
 });
 
 export const deleteMessageController = asyncHandler(async (req, res) => {
-  const message = await deleteMessageService({
+  await deleteMessageService({
     messageId: req.params.messageId,
     userId: req.user._id,
   });
-  return successResponse(res, { message: "Message deleted" });
+  return successResponse(res, { message: "Message deleted", data: { deleted: true } });
 });
 
 export const uploadChatImageController = asyncHandler(async (req, res) => {
@@ -51,5 +51,5 @@ export const uploadChatImageController = asyncHandler(async (req, res) => {
     matchId: req.body.matchId,
     file: req.file,
   });
-  return successResponse(res, { data: { message } });
+  return successResponse(res, { message: "Image uploaded", data: { message } });
 });

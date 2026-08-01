@@ -4,6 +4,14 @@ export const findBookmarks = (filter, projection, options = {}) => {
   return Bookmark.find(filter, projection, options);
 };
 
+export const upsertBookmark = (userId, savedUserId) => {
+  return Bookmark.findOneAndUpdate(
+    { userId, savedUserId },
+    {},
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+};
+
 export const createBookmark = (payload) => {
   const bookmark = new Bookmark(payload);
   return bookmark.save();

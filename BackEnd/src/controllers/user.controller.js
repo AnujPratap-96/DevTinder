@@ -41,7 +41,7 @@ export const getUsersController = asyncHandler(async (req, res) => {
   const result = await getUsersWithFilters(loggedInUser, req.query || {});
   return successResponse(res, {
     message: "Users fetched successfully",
-    data: result,
+    data: { users: result },
   });
 });
 
@@ -50,7 +50,7 @@ export const searchUsersController = asyncHandler(async (req, res) => {
   const result = await searchUsers(loggedInUser, req.query || {});
   return successResponse(res, {
     message: "Search completed successfully",
-    data: result,
+    data: { users: result },
   });
 });
 
@@ -59,7 +59,7 @@ export const endorseUserController = asyncHandler(async (req, res) => {
   const { endorsements, targetUser } = await endorseConnection(req.user, targetUserId, skill);
   return successResponse(res, {
     message: `You endorsed ${targetUser?.firstName ?? targetUserId} for ${skill}`,
-    data: endorsements,
+    data: { endorsements },
   });
 });
 
@@ -68,7 +68,7 @@ export const savePublicKeyController = asyncHandler(async (req, res) => {
   const result = await savePublicKey({ userId: req.user._id, publicKey, keyVersion });
   return successResponse(res, {
     message: "Encryption key saved",
-    data: result,
+    data: { key: result },
   });
 });
 
@@ -77,6 +77,6 @@ export const getPublicKeyController = asyncHandler(async (req, res) => {
   const result = await getPublicKey({ userId });
   return successResponse(res, {
     message: "Public key fetched",
-    data: result,
+    data: { key: result },
   });
 });

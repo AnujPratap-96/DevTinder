@@ -4,28 +4,24 @@ import * as inviteService from "../services/invite.service.js";
 
 export const sendInviteController = asyncHandler(async (req, res) => {
   const { email } = req.body ?? {};
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ success: false, message: "Valid email is required", error: "VALIDATION_ERROR" });
-  }
   const result = await inviteService.sendInvite({ userId: req.user._id, email });
-  return successResponse(res, { message: "Invitation sent successfully!", data: result });
+  return successResponse(res, { message: "Invitation sent successfully!", data: { invite: result } });
 });
 
 export const getStatsController = asyncHandler(async (req, res) => {
   const stats = await inviteService.getStats(req.user._id);
-  return successResponse(res, { data: stats });
+  return successResponse(res, { message: "Invite stats fetched", data: stats });
 });
 
 export const listInvitesController = asyncHandler(async (req, res) => {
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const cursor = req.query.cursor || null;
   const result = await inviteService.listInvites(req.user._id, { limit, cursor });
-  return successResponse(res, { data: result });
+  return successResponse(res, { message: "Invites fetched", data: result });
 });
 
 export const cancelInviteController = asyncHandler(async (req, res) => {
   const { inviteId } = req.params;
-  if (!inviteId) return res.status(400).json({ success: false, message: "inviteId is required", error: "VALIDATION_ERROR" });
   await inviteService.cancelInvite({ userId: req.user._id, inviteId });
-  return successResponse(res, { message: "Invite cancelled" });
+  return successResponse(res, { message: "Invite cancelled", data: { cancelled: true } });
 });

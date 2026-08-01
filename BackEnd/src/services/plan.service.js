@@ -1,4 +1,4 @@
-import Plan from "../models/plan.js";
+import * as planRepo from "../repositories/plan.repository.js";
 import { AppError, ValidationError } from "../errors/index.js";
 import { invalidatePlanCache } from "../utils/planConfig.js";
 
@@ -102,36 +102,27 @@ const DEFAULT_PLANS = [
 
 export const seedDefaultPlans = async () => {
   for (const plan of DEFAULT_PLANS) {
-    // Create plans that don't exist yet. $setOnInsert ensures we never
-    // overwrite admin edits (price, features, etc.) on restart/deploy.
-    await Plan.findOneAndUpdate(
+    await planRepo.upsertPlan(
       { slug: plan.slug },
-      { $setOnInsert: plan },
-      { upsert: true, setDefaultsOnInsert: true }
+      { $setOnInsert: plan }
     );
-    // Always keep plan limits in sync with code defaults so features work
-    // even for plans seeded before these fields existed. Other admin-editable
-    // fields (price, features) are left untouched.
-    await Plan.updateOne(
-      { slug: plan.slug },
-      {
-        $set: {
-          "limits.canCall": plan.limits.canCall,
-          "limits.canVideoCall": plan.limits.canVideoCall,
-          "limits.canChat": plan.limits.canChat,
-          "limits.invitesPerMonth": plan.limits.invitesPerMonth,
-        },
-      }
-    );
+    await planRepo.updatePlan({ slug: plan.slug }, {
+      $set: {
+        "limits.canCall": plan.limits.canCall,
+        "limits.canVideoCall": plan.limits.canVideoCall,
+        "limits.canChat": plan.limits.canChat,
+        "limits.invitesPerMonth": plan.limits.invitesPerMonth,
+      },
+    });
   }
 };
 
 export const listPlans = async () => {
-  return Plan.find().sort({ order: 1 }).lean();
+  return planRepo.findPlans();
 };
 
 export const listActivePlans = async () => {
-  return Plan.find({ isActive: true }).sort({ order: 1 }).lean();
+  return planRepo.findPlans({ isActive: true });
 };
 
 const sanitizePlanInput = (body = {}) => {
@@ -161,7 +152,6 @@ const sanitizePlanInput = (body = {}) => {
   if (order !== undefined) data.order = Number(order) || 0;
   if (isActive !== undefined) data.isActive = Boolean(isActive);
   if (isFree !== undefined) data.isFree = Boolean(isFree);
-  // Free plans always have price 0 and are always active.
   if (data.isFree) {
     data.price = 0;
     data.isActive = true;
@@ -203,18 +193,18 @@ export const createPlan = async (body) => {
     throw new ValidationError("A valid slug (lowercase letters/numbers/dashes) is required");
   }
   const cleanSlug = String(slug).toLowerCase();
-  if (await Plan.findOne({ slug: cleanSlug })) {
+  if (await planRepo.findPlan({ slug: cleanSlug })) {
     throw new ValidationError(`Plan with slug "${cleanSlug}" already exists`);
   }
   const data = sanitizePlanInput(body);
   data.slug = cleanSlug;
-  const plan = await Plan.create(data);
+  const plan = await planRepo.createPlan(data);
   invalidatePlanCache();
   return plan;
 };
 
 export const updatePlan = async (id, body) => {
-  const plan = await Plan.findById(id);
+  const plan = await planRepo.findPlanById(id);
   if (!plan) throw new AppError({ message: "Plan not found", statusCode: 404 });
   if (plan.isFree && body?.price !== undefined && Number(body.price) > 0) {
     throw new ValidationError("The free plan price must stay 0");
@@ -227,7 +217,7 @@ export const updatePlan = async (id, body) => {
 };
 
 export const deletePlan = async (id) => {
-  const plan = await Plan.findById(id);
+  const plan = await planRepo.findPlanById(id);
   if (!plan) throw new AppError({ message: "Plan not found", statusCode: 404 });
   if (plan.isFree) {
     throw new ValidationError("The free plan cannot be deleted");

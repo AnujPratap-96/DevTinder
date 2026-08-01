@@ -22,10 +22,10 @@ export const paymentWebhookController = asyncHandler(async (req, res) => {
     signature: req.get("X-Razorpay-Signature"),
     body: req.body,
   });
-  return successResponse(res, { message: "Webhook Received" });
+  return successResponse(res, { message: "Webhook received", data: { received: true } });
 });
 
 export const verifyPremiumController = asyncHandler(async (req, res) => {
   const data = verifyPremium(req.user.toJSON());
-  return successResponse(res, { data });
+  return successResponse(res, { message: "Premium status fetched", data: { premium: data } });
 });

@@ -2,6 +2,7 @@ import { createNotificationAndNotify } from "../utils/notify.js";
 import {
   createConnectionRequest,
   findConnectionRequest,
+  updateConnectionRequest,
 } from "../repositories/connectionRequest.repository.js";
 import { findUserById } from "../repositories/user.repository.js";
 import { AppError, ValidationError } from "../errors/index.js";
@@ -85,8 +86,10 @@ export const reviewConnectionRequest = async ({ requestId, status, reviewer }) =
     throw new AppError({ message: "Connection Request not found", statusCode: 404 });
   }
 
-  request.status = status;
-  const updated = await request.save();
+  await updateConnectionRequest(
+    { _id: requestId },
+    { status }
+  );
 
   await createNotificationAndNotify({
     userId: request.fromUserId,
@@ -113,5 +116,5 @@ export const reviewConnectionRequest = async ({ requestId, status, reviewer }) =
     }
   }
 
-  return updated;
+  return request;
 };
