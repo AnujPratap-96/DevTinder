@@ -31,6 +31,20 @@ const chatSchema = new mongoose.Schema(
       of: Number,
       default: {},
     },
+    // ── [PHASE-1] additive field ──────────────────────────────────────────
+    // Per-participant chat preferences: { [userId]: { pinned, muted } }.
+    prefs: {
+      type: Map,
+      of: new mongoose.Schema(
+        {
+          pinned: { type: Boolean, default: false },
+          muted: { type: Boolean, default: false },
+        },
+        { _id: false }
+      ),
+      default: {},
+    },
+    // ── [/PHASE-1] ────────────────────────────────────────────────────────
   },
   { timestamps: true }
 );

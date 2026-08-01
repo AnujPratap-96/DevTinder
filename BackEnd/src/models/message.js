@@ -38,9 +38,27 @@ const messageSchema = new mongoose.Schema(
     },
     messageType: {
       type: String,
-      enum: ["text", "image", "file", "call"],
+      enum: ["text", "image", "file", "call", "audio"],
       default: "text",
     },
+    // ── [PHASE-1] additive fields ──────────────────────────────────────────
+    // Emoji reactions (one entry per user per emoji).
+    reactions: {
+      type: [
+        {
+          userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+          emoji: { type: String, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
+    // Timestamp set when the sender pins the message (null = not pinned).
+    pinnedAt: {
+      type: Date,
+      default: null,
+    },
+    // ── [/PHASE-1] ────────────────────────────────────────────────────────
     delivered: {
       type: Boolean,
       default: false,
