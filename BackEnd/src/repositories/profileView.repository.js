@@ -15,6 +15,11 @@ export const findViewsByViewedUserId = async (userId, { limit = 20, cursor = nul
   return { views, nextCursor, hasMore };
 };
 
+export const countViewsByViewedUserId = (userId) => ProfileView.countDocuments({ viewedUserId: userId });
+
+export const countViewsBefore = (userId, cursor) =>
+  ProfileView.countDocuments({ viewedUserId: userId, _id: { $lt: cursor } });
+
 export const upsertProfileView = (viewerId, viewedUserId) => {
   return ProfileView.findOneAndUpdate(
     { viewerId, viewedUserId },

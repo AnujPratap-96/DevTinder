@@ -29,6 +29,7 @@ const DEFAULT_PLANS = [
       canCall: false,
       canVideoCall: false,
       canViewProfileViews: false,
+      profileViewsLimit: 0,
       blueBadge: false,
       themeAccess: false,
     },
@@ -61,6 +62,7 @@ const DEFAULT_PLANS = [
       canCall: true,
       canVideoCall: false,
       canViewProfileViews: true,
+      profileViewsLimit: 6,
       blueBadge: true,
       themeAccess: false,
     },
@@ -94,6 +96,7 @@ const DEFAULT_PLANS = [
       canCall: true,
       canVideoCall: true,
       canViewProfileViews: true,
+      profileViewsLimit: null,
       blueBadge: true,
       themeAccess: true,
     },
@@ -112,6 +115,7 @@ export const seedDefaultPlans = async () => {
         "limits.canVideoCall": plan.limits.canVideoCall,
         "limits.canChat": plan.limits.canChat,
         "limits.invitesPerMonth": plan.limits.invitesPerMonth,
+        "limits.profileViewsLimit": plan.limits.profileViewsLimit,
       },
     });
   }
@@ -180,6 +184,7 @@ const sanitizePlanInput = (body = {}) => {
       canCall: Boolean(l.canCall),
       canVideoCall: Boolean(l.canVideoCall),
       canViewProfileViews: Boolean(l.canViewProfileViews),
+      profileViewsLimit: numOrNull(l.profileViewsLimit),
       blueBadge: Boolean(l.blueBadge),
       themeAccess: Boolean(l.themeAccess),
     };

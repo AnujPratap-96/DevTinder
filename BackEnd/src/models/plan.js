@@ -8,6 +8,7 @@ const planLimitsSchema = new mongoose.Schema(
     canCreateProjects: { type: Boolean, default: false },
     canChat: { type: Boolean, default: false },
     canViewProfileViews: { type: Boolean, default: false },
+    profileViewsLimit: { type: Number, default: null }, // null = unlimited, 0 = count only, N = last N visible
     blueBadge: { type: Boolean, default: false },
     themeAccess: { type: Boolean, default: false },
   },

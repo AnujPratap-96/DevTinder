@@ -62,12 +62,21 @@ const createCallMessage = async ({ io, chatId, callerId, calleeId, callId, type,
   return populated;
 };
 
-const scheduleMissed = (callId) => {
+const scheduleMissed = (io, callId) => {
   const t = setTimeout(async () => {
     inviteTimeouts.delete(callId);
     try {
       const session = await callService.endCall(callId, "timeout");
       if (session) {
+        createCallMessage({
+          io,
+          chatId: session.chatId,
+          callerId: session.callerId,
+          calleeId: session.calleeId,
+          callId,
+          type: session.type,
+          status: "missed",
+        });
         emitToUser(session.calleeId, "call:missed", {
           callId,
           type: session.type,
@@ -151,7 +160,7 @@ export const initializeCallSocket = (io) => {
           calleeId,
         });
 
-        scheduleMissed(session.callId);
+        scheduleMissed(io, session.callId);
       } catch (err) {
         logger.warn("[call] invite failed from=%s to=%s err=%s", userId, calleeId, err.message);
         socket.emit("call:error", { message: err.message, code: err.code });
@@ -170,15 +179,6 @@ export const initializeCallSocket = (io) => {
         await callService.acceptCall(callId);
         clearInviteTimeout(callId);
         emitToUser(call.callerId, "call:accept", { callId });
-        createCallMessage({
-          io,
-          chatId: call.chatId,
-          callerId: call.callerId,
-          calleeId: call.calleeId,
-          callId,
-          type: call.type,
-          status: "started",
-        });
       } catch (err) {
         socket.emit("call:error", { message: err.message, code: err.code });
       }
@@ -192,6 +192,15 @@ export const initializeCallSocket = (io) => {
         if (!call || call.calleeId !== userId.toString()) return;
         await callService.endCall(callId, "decline");
         clearInviteTimeout(callId);
+        createCallMessage({
+          io,
+          chatId: call.chatId,
+          callerId: call.callerId,
+          calleeId: call.calleeId,
+          callId,
+          type: call.type,
+          status: "declined",
+        });
         emitToUser(call.callerId, "call:decline", { callId });
       } catch (err) {
         socket.emit("call:error", { message: err.message, code: err.code });
@@ -231,7 +240,13 @@ export const initializeCallSocket = (io) => {
         const session = await callService.endCall(callId, reason);
         clearInviteTimeout(callId);
         emitToUser(otherParty(call, userId), "call:end", { callId, reason });
-        if (session && session.connectedAt) {
+        if (!session) return;
+        // Instagram-style: exactly one chat entry per call.
+        // - answered calls → "Call ended · m:ss"
+        // - calls that ended while still ringing (caller hung up / timeout)
+        //   → "Missed call"
+        // - declined calls are handled by `call:decline`.
+        if (session.connectedAt) {
           createCallMessage({
             io,
             chatId: call.chatId || session.chatId,
@@ -241,6 +256,17 @@ export const initializeCallSocket = (io) => {
             type: call.type,
             status: "ended",
             durationSec: session.durationSec || 0,
+          });
+        } else if (session.status !== "declined") {
+          createCallMessage({
+            io,
+            chatId: call.chatId || session.chatId,
+            callerId: call.callerId,
+            calleeId: call.calleeId,
+            callId,
+            type: call.type,
+            status: "missed",
+            durationSec: 0,
           });
         }
       } catch (err) {

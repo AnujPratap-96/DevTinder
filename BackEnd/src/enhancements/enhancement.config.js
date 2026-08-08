@@ -13,7 +13,8 @@ const ENHANCEMENTS = {
   reactions: {
     enabled: true,
     maxPerMessage: 20,
-    allowedEmojis: ["👍", "❤️", "😂", "🎉", "🔥", "👀", "🚀", "💡"],
+    // Instagram-style quick reactions (double-tap default is the first: ❤️)
+    allowedEmojis: ["❤️", "😍", "😂", "😮", "😢", "👍", "👏"],
   },
   chatSearch: {
     enabled: true,

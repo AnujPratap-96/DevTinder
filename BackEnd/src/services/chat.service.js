@@ -124,8 +124,6 @@ export const uploadChatImage = async ({ userId, targetUserId, matchId, file }) =
     message: uploadResult.secure_url,
     isEncrypted: false,
     messageType: "image",
-    delivered: true,
-    deliveredAt: new Date(),
     metadata: { width: uploadResult.width, height: uploadResult.height },
   });
 

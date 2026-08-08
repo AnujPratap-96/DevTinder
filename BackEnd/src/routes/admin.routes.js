@@ -12,6 +12,8 @@ import {
   createPlanController,
   updatePlanController,
   deletePlanController,
+  listFlaggedMessagesController, // [PHASE-3]
+  reviewFlaggedMessageController, // [PHASE-3]
 } from "../controllers/admin.controller.js";
 import { userAuth } from "../middlewares/auth.js";
 import validate from "../middlewares/validate.js";
@@ -39,6 +41,15 @@ router.post(
   ensureAdmin,
   validate(banUserSchema),
   unbanUserController
+);
+
+// [PHASE-3] moderation review queue
+router.get("/admin/moderation/flagged", userAuth, ensureAdmin, listFlaggedMessagesController);
+router.post(
+  "/admin/moderation/:messageId/review",
+  userAuth,
+  ensureAdmin,
+  reviewFlaggedMessageController
 );
 
 router.post(

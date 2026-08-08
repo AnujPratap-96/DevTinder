@@ -47,3 +47,27 @@ export const oauthLoginSchema = z.object({
     accessToken: z.string().optional(),
   }),
 });
+
+// [PHASE-3] two-factor & session management schemas
+const totpCode = z.string().length(6, "Code must be 6 digits").regex(/^\d{6}$/, "Code must be numeric");
+
+export const enable2faSchema = z.object({
+  body: z.object({ token: totpCode }),
+});
+
+export const disable2faSchema = z.object({
+  body: z.object({ token: totpCode }),
+});
+
+export const verify2faLoginSchema = z.object({
+  body: z.object({
+    tempToken: z.string().min(1, "tempToken is required"),
+    token: totpCode,
+  }),
+});
+
+export const revokeSessionSchema = z.object({
+  body: z.object({
+    sessionId: z.string().min(1, "sessionId is required"),
+  }),
+});

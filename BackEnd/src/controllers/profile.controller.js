@@ -1,5 +1,6 @@
 import { successResponse } from "../utils/response.js";
 import { asyncHandler } from "../utils/async-handler.js";
+import { getPlanLimits } from "../utils/planConfig.js";
 import {
   getSelfProfile,
   updateProfile,
@@ -10,6 +11,7 @@ import {
   getProfileViews,
   recordProfileView,
   getUserProfile,
+  updatePrivacy, // [PHASE-3]
 } from "../services/profile.service.js";
 
 export const getProfileController = asyncHandler(async (req, res) => {
@@ -59,18 +61,30 @@ export const updateAvailabilityController = asyncHandler(async (req, res) => {
 });
 
 export const getProfileViewsController = asyncHandler(async (req, res) => {
-  const data = await getProfileViews(req.user._id, req.query);
+  const planLimits = await getPlanLimits(req.user?.membershipType || "free");
+  const data = await getProfileViews(req.user._id, req.query, planLimits.profileViewsLimit);
   return successResponse(res, { message: "Profile views fetched", data });
 });
 
 export const recordProfileViewController = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const result = await recordProfileView({ viewerId: req.user._id, viewedUserId: userId });
+  const result = await recordProfileView({
+    viewerId: req.user._id,
+    viewedUserId: userId,
+    anonymize: !!req.user?.privacy?.hideProfileViews, // [PHASE-3]
+  });
   return successResponse(res, { message: "View recorded", data: { view: result } });
+});
+
+// [PHASE-3] privacy settings (anonymized browsing)
+export const updatePrivacyController = asyncHandler(async (req, res) => {
+  const { hideProfileViews } = req.body ?? {};
+  const data = await updatePrivacy({ userId: req.user._id, hideProfileViews });
+  return successResponse(res, { message: "Privacy settings updated", data });
 });
 
 export const getUserProfileController = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const profile = await getUserProfile({ userId, viewerId: req.user._id });
+  const profile = await getUserProfile({ userId, viewerId: req.user._id, viewer: req.user });
   return successResponse(res, { message: "Profile fetched", data: { profile } });
 });

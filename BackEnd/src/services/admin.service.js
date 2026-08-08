@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import * as userRepo from "../repositories/user.repository.js";
 import * as reportRepo from "../repositories/report.repository.js";
+import Message from "../models/message.js"; // [PHASE-3]
 import { ValidationError, AppError } from "../errors/index.js";
 
 export const listUsers = async ({
@@ -155,6 +156,45 @@ export const resolveReport = async ({ reportId, status, reviewerId }) => {
   await report.save();
 
   return report;
+};
+
+// ── [PHASE-3] moderation review queue ────────────────────────────────────
+
+export const listFlaggedMessages = async ({ limit = 20, cursor = null } = {}) => {
+  const filter = { "moderation.flagged": true };
+  if (cursor) {
+    if (!mongoose.isValidObjectId(cursor)) {
+      throw new ValidationError("Invalid cursor");
+    }
+    filter._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+  }
+
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const docs = await Message.find(filter)
+    .populate("senderId", "firstName lastName emailId photoUrl")
+    .sort({ createdAt: -1 })
+    .limit(pageSize + 1)
+    .lean();
+
+  const hasMore = docs.length > pageSize;
+  const messages = hasMore ? docs.slice(0, pageSize) : docs;
+  const nextCursor = hasMore ? messages[messages.length - 1]._id : null;
+  return { messages, nextCursor, hasMore };
+};
+
+export const reviewFlaggedMessage = async ({ messageId, reviewerId }) => {
+  if (!messageId || !mongoose.isValidObjectId(messageId)) {
+    throw new ValidationError("Valid messageId is required");
+  }
+  const message = await Message.findByIdAndUpdate(
+    messageId,
+    { $set: { "moderation.reviewedAt": new Date(), "moderation.reviewedBy": reviewerId } },
+    { new: true }
+  );
+  if (!message) {
+    throw new AppError({ message: "Message not found", statusCode: 404 });
+  }
+  return message;
 };
 
 export default {

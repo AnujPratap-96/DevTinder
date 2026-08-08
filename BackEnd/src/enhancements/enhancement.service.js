@@ -182,13 +182,23 @@ export const addReaction = async ({ userId, matchId, messageId, emoji }) => {
   if (!message) throw new NotFoundError("Message");
 
   const reactions = message.reactions || [];
+
+  // Instagram-style: a user keeps ONE reaction per message. Reacting with a
+  // different emoji replaces the old one; the same emoji toggles it off.
   const existingIndex = reactions.findIndex(
-    (r) => r.userId.toString() === userId.toString() && r.emoji === emoji
+    (r) => r.userId.toString() === userId.toString()
   );
 
   let nextReactions;
   if (existingIndex >= 0) {
-    nextReactions = reactions.filter((_, i) => i !== existingIndex);
+    const existing = reactions[existingIndex];
+    if (existing.emoji === emoji) {
+      nextReactions = reactions.filter((_, i) => i !== existingIndex);
+    } else {
+      nextReactions = reactions.map((r, i) =>
+        i === existingIndex ? { ...r, emoji, createdAt: new Date() } : r
+      );
+    }
   } else {
     if (reactions.length >= ENHANCEMENTS.reactions.maxPerMessage) {
       throw new AppError({ message: "Maximum reactions reached for this message", statusCode: 400 });

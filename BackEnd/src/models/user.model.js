@@ -216,6 +216,20 @@ location: {
       type: String,
       default: null,
     },
+    // ── [PHASE-3] trust, safety & account security ────────────────────────
+    // Mirrors the TwoFactor collection (secret lives there, never on the user
+    // doc). Exposed to clients so the UI can show 2FA status without leaking
+    // any key material.
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    // Privacy toggles. hideProfileViews = anonymized browsing: the user's own
+    // profile visits are not recorded.
+    privacy: {
+      hideProfileViews: { type: Boolean, default: false },
+    },
+    // ── [/PHASE-3] ────────────────────────────────────────────────────────
     socialLinks: {
       github: { type: String, trim: true },
       linkedin: { type: String, trim: true },

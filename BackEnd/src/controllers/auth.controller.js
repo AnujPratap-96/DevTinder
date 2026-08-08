@@ -11,11 +11,15 @@ import {
   initiateSignup,
   completeSignup,
   login,
+  verifyTwoFactorLogin,
   oauthLogin,
   logout,
   generateAndStoreRefreshToken,
   rotateRefreshToken,
 } from "../services/auth.service.js";
+import * as twoFactorService from "../security/twoFactor.service.js"; // [PHASE-3]
+import * as sessionService from "../security/session.service.js"; // [PHASE-3]
+import logger from "../utils/logger.js";
 
 const secureCookieFlags = (req) => {
   const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https";
@@ -40,6 +44,35 @@ const setAuthCookies = (req, res, { accessToken, refreshToken }) => {
 const clearAuthCookies = (req, res) => {
   res.cookie("token", "", { expires: new Date(0), ...secureCookieFlags(req) });
   res.cookie("refreshToken", "", { expires: new Date(0), ...secureCookieFlags(req) });
+};
+
+// [PHASE-3] Best-effort device label from the User-Agent header.
+const describeDevice = (req) => {
+  const ua = req.headers["user-agent"] ?? "";
+  let device = "Unknown device";
+  if (/mobile|android|iphone|ipad/i.test(ua)) device = "Mobile";
+  else if (/windows/i.test(ua)) device = "Windows";
+  else if (/macintosh|mac os/i.test(ua)) device = "macOS";
+  else if (/linux/i.test(ua)) device = "Linux";
+  const browser = /edg\//i.test(ua) ? "Edge"
+    : /chrome|crios/i.test(ua) ? "Chrome"
+    : /firefox/i.test(ua) ? "Firefox"
+    : /safari/i.test(ua) ? "Safari"
+    : "";
+  return browser ? `${device} · ${browser}` : device;
+};
+
+const recordSession = async (req, userId, refreshToken) => {
+  try {
+    await sessionService.createSession({
+      userId,
+      refreshToken,
+      device: describeDevice(req),
+      ip: req.ip ?? req.socket?.remoteAddress ?? "",
+    });
+  } catch (error) {
+    logger.warn("Failed to record session", error);
+  }
 };
 
 export const sendOtpController = asyncHandler(async (req, res) => {
@@ -87,18 +120,39 @@ export const completeSignupController = asyncHandler(async (req, res) => {
   const refreshToken = await generateAndStoreRefreshToken(user);
   setAuthCookies(req, res, { accessToken: token, refreshToken });
   res.clearCookie("signup_token");
+  await recordSession(req, user._id, refreshToken); // [PHASE-3]
 
   return successResponse(res, { message: "User added successfully", data: { user } });
 });
 
 export const loginController = asyncHandler(async (req, res) => {
   const { emailId, password } = req.body ?? {};
-  const { user, token } = await login({ emailId, password });
+  const { user, token, twoFactorRequired, tempToken } = await login({ emailId, password });
+
+  // [PHASE-3] Two-factor challenge: no session/cookies yet, just a temp token.
+  if (twoFactorRequired) {
+    return successResponse(res, {
+      message: "Two-factor code required",
+      data: { twoFactorRequired: true, tempToken },
+    });
+  }
 
   const refreshToken = await generateAndStoreRefreshToken(user);
   setAuthCookies(req, res, { accessToken: token, refreshToken });
+  await recordSession(req, user._id, refreshToken); // [PHASE-3]
 
   return successResponse(res, { message: "User Logged In Successfully", data: { user } });
+});
+
+export const verifyTwoFactorLoginController = asyncHandler(async (req, res) => {
+  const { tempToken, token } = req.body ?? {};
+  const { user, token: accessToken } = await verifyTwoFactorLogin({ tempToken, token });
+
+  const refreshToken = await generateAndStoreRefreshToken(user);
+  setAuthCookies(req, res, { accessToken, refreshToken });
+  await recordSession(req, user._id, refreshToken); // [PHASE-3]
+
+  return successResponse(res, { message: "Login successful", data: { user } });
 });
 
 export const oauthLoginController = asyncHandler(async (req, res) => {
@@ -107,6 +161,7 @@ export const oauthLoginController = asyncHandler(async (req, res) => {
 
   const refreshToken = await generateAndStoreRefreshToken(user);
   setAuthCookies(req, res, { accessToken: token, refreshToken });
+  await recordSession(req, user._id, refreshToken); // [PHASE-3]
 
   return successResponse(res, { message: "OAuth login successful", data: { user } });
 });
@@ -125,12 +180,29 @@ export const refreshTokenController = asyncHandler(async (req, res) => {
     throw new AppError({ message: "Refresh token expired", statusCode: 401, errorCode: "REFRESH_TOKEN_EXPIRED" });
   }
 
+  // [PHASE-3] Session-backed rotation: the refresh token must belong to a
+  // live session record, so revoking a device also kills its refresh token.
+  const session = await sessionService.findSessionByRefreshToken(incomingRefreshToken);
   const user = await findUserById(payload._id);
-  if (!user || !user.refreshToken) {
+  if (!user) {
     clearAuthCookies(req, res);
     throw new AppError({ message: "Refresh token invalid", statusCode: 401, errorCode: "REFRESH_TOKEN_INVALID" });
   }
 
+  if (session) {
+    const newAccessToken = await user.getJWT();
+    const newRefreshToken = await rotateRefreshToken(user);
+    await sessionService.rotateSessionToken(session._id, newRefreshToken);
+    setAuthCookies(req, res, { accessToken: newAccessToken, refreshToken: newRefreshToken });
+    return successResponse(res, { message: "Token refreshed", data: { refreshed: true } });
+  }
+
+  // Legacy fallback (no session records — sessions disabled): keep the
+  // original single-refresh-token behavior.
+  if (!user.refreshToken) {
+    clearAuthCookies(req, res);
+    throw new AppError({ message: "Refresh token invalid", statusCode: 401, errorCode: "REFRESH_TOKEN_INVALID" });
+  }
   if (user.refreshToken !== incomingRefreshToken) {
     clearAuthCookies(req, res);
     throw new AppError({ message: "Refresh token reused", statusCode: 401, errorCode: "REFRESH_TOKEN_REUSED" });
@@ -144,7 +216,63 @@ export const refreshTokenController = asyncHandler(async (req, res) => {
 });
 
 export const logoutController = asyncHandler(async (req, res) => {
+  // [PHASE-3] Kill the current device's session record too.
+  await sessionService.revokeCurrentSession({
+    userId: req.user?._id,
+    refreshToken: req.cookies.refreshToken,
+  });
   await logout(req.user?._id);
   clearAuthCookies(req, res);
   return successResponse(res, { message: "User Logged Out Successfully", data: { loggedOut: true } });
+});
+
+// ── [PHASE-3] two-factor controllers ─────────────────────────────────────
+
+export const setup2faController = asyncHandler(async (req, res) => {
+  const data = await twoFactorService.startSetup({
+    userId: req.user._id,
+    emailId: req.user.emailId,
+  });
+  return successResponse(res, { message: "2FA setup started", data });
+});
+
+export const enable2faController = asyncHandler(async (req, res) => {
+  const { token } = req.body ?? {};
+  const data = await twoFactorService.enable({ userId: req.user._id, token });
+  return successResponse(res, { message: "Two-factor authentication enabled", data });
+});
+
+export const disable2faController = asyncHandler(async (req, res) => {
+  const { token } = req.body ?? {};
+  const data = await twoFactorService.disable({ userId: req.user._id, token });
+  return successResponse(res, { message: "Two-factor authentication disabled", data });
+});
+
+// ── [PHASE-3] session controllers ────────────────────────────────────────
+
+export const getSessionsController = asyncHandler(async (req, res) => {
+  const { sessions } = await sessionService.listSessions(req.user._id);
+  const current = await sessionService.findSessionByRefreshToken(req.cookies.refreshToken);
+  return successResponse(res, {
+    message: "Sessions fetched successfully",
+    data: { sessions, currentSessionId: current?._id ?? null },
+  });
+});
+
+export const revokeSessionController = asyncHandler(async (req, res) => {
+  const { sessionId } = req.body ?? {};
+  const result = await sessionService.revokeSession({
+    userId: req.user._id,
+    sessionId,
+    currentRefreshToken: req.cookies.refreshToken,
+  });
+
+  // If the revoked session is the one currently in use, log it out server-side.
+  if (result.wasCurrent) {
+    await logout(req.user._id);
+  }
+  return successResponse(res, {
+    message: result.revoked ? "Session revoked successfully" : "Session not found",
+    data: { revoked: result.revoked },
+  });
 });

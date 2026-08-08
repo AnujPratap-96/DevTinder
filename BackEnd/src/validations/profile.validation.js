@@ -26,3 +26,10 @@ export const updateAvailabilitySchema = z.object({
     availability: z.enum(["open", "busy", "not_looking"]),
   }),
 });
+
+// [PHASE-3] privacy settings
+export const updatePrivacySchema = z.object({
+  body: z.object({
+    hideProfileViews: z.boolean(),
+  }),
+});

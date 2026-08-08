@@ -2,7 +2,9 @@ import { z } from "zod";
 
 export const markNotificationsSchema = z.object({
   body: z.object({
-    notificationIds: z.array(z.string()).min(1, "At least one notification ID is required"),
+    // Optional: when omitted the server marks ALL of the user's notifications
+    // as read (used by the UI's auto-mark-on-open and "Mark read" actions).
+    notificationIds: z.array(z.string()).optional(),
   }),
 });
 

@@ -9,6 +9,7 @@ import initializeCallSocket from "../sockets/call.socket.js";
 import { initializeEnhancementSocket } from "../enhancements/enhancement.socket.js"; // [PHASE-1]
 import config from "../config/env.js";
 import logger from "./logger.js";
+import { buildModerationUpdate } from "../security/moderation.service.js"; // [PHASE-3]
 
 const activeUsers = new Map();
 const offlineTimeouts = new Map();
@@ -253,6 +254,11 @@ const initializeSocket = (server) => {
             throw new SocketError("receiver could not be determined", "INTERNAL_ERROR");
           }
 
+          // [PHASE-3] Content moderation — flag only, never auto-block.
+          // E2E-encrypted messages are skipped by design (server can't read
+          // them); plaintext text messages get the keyword scan.
+          const moderationUpdate = await buildModerationUpdate({ text: message, messageType });
+
           const newMessage = await Message.create({
             matchId: chat._id,
             senderId: userId,
@@ -262,6 +268,7 @@ const initializeSocket = (server) => {
             isEncrypted: Boolean(isEncrypted),
             clientMessageId,
             metadata,
+            ...moderationUpdate,
           });
 
           const unreadIncKey = `unreadCounts.${receiverId}`;

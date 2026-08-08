@@ -10,6 +10,7 @@ import {
   getProfileViewsController,
   recordProfileViewController,
   getUserProfileController,
+  updatePrivacyController, // [PHASE-3]
 } from "../controllers/profile.controller.js";
 import { userAuth } from "../middlewares/auth.js";
 import upload from "../config/multer.js";
@@ -19,7 +20,9 @@ import {
   changePasswordSchema,
   updateLocationSchema,
   updateAvailabilitySchema,
+  updatePrivacySchema,
 } from "../validations/profile.validation.js";
+import SECURITY from "../security/security.config.js"; // [PHASE-3]
 
 const router = Router();
 
@@ -56,6 +59,14 @@ router.patch(
 );
 router.get("/profile/views", userAuth, getProfileViewsController);
 router.post("/profile/view/:userId", userAuth, recordProfileViewController);
+if (SECURITY.enabled && SECURITY.anonymizedBrowsing.enabled) {
+  router.patch(
+    "/profile/privacy",
+    userAuth,
+    validate(updatePrivacySchema),
+    updatePrivacyController
+  );
+}
 router.get("/profile/:userId", userAuth, getUserProfileController);
 
 export default router;

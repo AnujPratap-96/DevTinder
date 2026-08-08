@@ -16,6 +16,8 @@ import { generateSignJWT } from "../middlewares/signupauth.js";
 import { run as sendEmail } from "../utils/sendEmail.js";
 import logger from "../utils/logger.js";
 import User from "../models/user.model.js";
+import * as twoFactorService from "../security/twoFactor.service.js"; // [PHASE-3]
+import * as sessionService from "../security/session.service.js"; // [PHASE-3]
 
 const ALLOWED_PURPOSES = ["signup", "login", "reset-password"];
 
@@ -197,11 +199,41 @@ export const login = async ({ emailId, password }) => {
     throw new ValidationError("Invalid credentials");
   }
 
+  // [PHASE-3] Two-factor gate: password is correct, but a TOTP code is
+  // required before any session is issued.
+  if (await twoFactorService.isEnabledForUser(user._id)) {
+    const tempToken = twoFactorService.createTempLoginToken(user._id);
+    return { user: null, twoFactorRequired: true, tempToken };
+  }
+
   user.lastSeenAt = new Date();
   await saveUser(user);
 
   const token = await user.getJWT();
   return { user, token };
+};
+
+export const verifyTwoFactorLogin = async ({ tempToken, token }) => {
+  if (!tempToken || !token) {
+    throw new ValidationError("Two-factor token and code are required");
+  }
+
+  const payload = twoFactorService.decodeTempLoginToken(tempToken);
+  const user = await findUserById(payload._id);
+  if (!user) {
+    throw new AppError({ message: "User not found", statusCode: 404 });
+  }
+  if (!user.twoFactorEnabled) {
+    throw new ValidationError("Two-factor authentication is not enabled");
+  }
+
+  await twoFactorService.verifyLoginCode({ userId: user._id, token });
+
+  user.lastSeenAt = new Date();
+  await saveUser(user);
+
+  const accessToken = await user.getJWT();
+  return { user, token: accessToken };
 };
 
 const getGoogleProfile = async (credential) => {

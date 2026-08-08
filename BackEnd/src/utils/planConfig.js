@@ -35,6 +35,7 @@ const FALLBACK_LIMITS = {
   canCall: false,
   canVideoCall: false,
   canViewProfileViews: false,
+  profileViewsLimit: null, // null = unlimited, 0 = count only, N = last N visible
   blueBadge: false,
   themeAccess: false,
 };
@@ -52,6 +53,7 @@ const DEFAULT_LIMITS_BY_SLUG = {
     canCall: false,
     canVideoCall: false,
     canViewProfileViews: false,
+    profileViewsLimit: 0,
     blueBadge: false,
     themeAccess: false,
   },
@@ -64,6 +66,7 @@ const DEFAULT_LIMITS_BY_SLUG = {
     canCall: true,
     canVideoCall: false,
     canViewProfileViews: true,
+    profileViewsLimit: 6,
     blueBadge: true,
     themeAccess: false,
   },
@@ -76,6 +79,7 @@ const DEFAULT_LIMITS_BY_SLUG = {
     canCall: true,
     canVideoCall: true,
     canViewProfileViews: true,
+    profileViewsLimit: null,
     blueBadge: true,
     themeAccess: true,
   },

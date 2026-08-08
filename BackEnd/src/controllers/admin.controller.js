@@ -9,6 +9,8 @@ import {
   unbanUser,
   resolveReport,
   getUserPublic,
+  listFlaggedMessages, // [PHASE-3]
+  reviewFlaggedMessage, // [PHASE-3]
 } from "../services/admin.service.js";
 import {
   listPlansController,
@@ -64,6 +66,22 @@ export const resolveReportController = asyncHandler(async (req, res) => {
     reviewerId: req.user?._id,
   });
   return successResponse(res, { message: "Report updated", data: { report } });
+});
+
+// [PHASE-3] moderation review queue
+export const listFlaggedMessagesController = asyncHandler(async (req, res) => {
+  const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
+  const cursor = req.query.cursor || null;
+  const result = await listFlaggedMessages({ limit, cursor });
+  return successResponse(res, { message: "Flagged messages fetched", data: result });
+});
+
+export const reviewFlaggedMessageController = asyncHandler(async (req, res) => {
+  const message = await reviewFlaggedMessage({
+    messageId: req.params.messageId,
+    reviewerId: req.user?._id,
+  });
+  return successResponse(res, { message: "Message marked as reviewed", data: { message } });
 });
 
 export {
