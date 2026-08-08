@@ -60,7 +60,7 @@ router.post("/logout", authByIp, logoutController);
 
 // [PHASE-3] two-factor & active session management (flag-gated)
 if (SECURITY.enabled && SECURITY.twoFactor.enabled) {
-  router.post("/auth/2fa/verify-login", authLimiter, validate(verify2faLoginSchema), verifyTwoFactorLoginController);
+  router.post("/auth/2fa/verify-login", authByIp, validate(verify2faLoginSchema), verifyTwoFactorLoginController);
   router.post("/auth/2fa/setup", userAuth, setup2faController);
   router.post("/auth/2fa/enable", userAuth, validate(enable2faSchema), enable2faController);
   router.post("/auth/2fa/disable", userAuth, validate(disable2faSchema), disable2faController);
