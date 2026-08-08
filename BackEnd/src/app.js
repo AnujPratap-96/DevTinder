@@ -3,12 +3,12 @@ import helmet from "helmet";
 import mongoSanitize from "express-mongo-sanitize";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import rateLimit from "express-rate-limit";
 
 import routes from "./routes/index.js";
 import config from "./config/env.js";
 import { errorConverter, errorHandler } from "./middlewares/error.middleware.js";
 import logger from "./utils/logger.js";
+import { globalLimiter, rateLimit } from "./middlewares/rateLimiter.js";
 
 const app = express();
 
@@ -23,15 +23,8 @@ app.use(
   })
 );
 
-// Global Rate Limiting - protect against DoS
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: "Too many requests, please try again later." },
-});
-app.use(globalLimiter);
+// Global Rate Limiting - protect against DoS (token bucket per IP)
+app.use(rateLimit(globalLimiter, (req) => req.ip));
 
 app.use(helmet());
 app.use("/payment/webhook", express.raw({ type: "application/json" }));

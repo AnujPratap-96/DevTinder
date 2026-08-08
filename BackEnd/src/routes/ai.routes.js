@@ -15,9 +15,10 @@ import {
 import { userAuth } from "../middlewares/auth.js";
 import { requireMinimumPlan } from "../middlewares/requirePlan.js";
 import { aiDailyLimit } from "../middlewares/planLimits.js";
+import { userAiLimiter, rateLimit } from "../middlewares/rateLimiter.js";
 
 const router = Router();
-const guard = [userAuth, requireMinimumPlan("silver"), aiDailyLimit];
+const guard = [userAuth, requireMinimumPlan("silver"), aiDailyLimit, rateLimit(userAiLimiter, (req) => req.user._id.toString())];
 
 router.post("/ai/collaboration-activity", ...guard, collaborationActivityController);
 router.post("/ai/bio", ...guard, generateBioController);

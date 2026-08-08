@@ -12,6 +12,7 @@ import { requireMinimumPlan } from "../middlewares/requirePlan.js";
 import upload from "../config/multer.js";
 import validate from "../middlewares/validate.js";
 import { uploadChatImageSchema } from "../validations/chat.validation.js";
+import { userUploadLimiter, rateLimit } from "../middlewares/rateLimiter.js";
 
 const router = Router();
 const planGuard = [userAuth, requireMinimumPlan("silver")];
@@ -23,6 +24,7 @@ router.delete("/messages/:messageId", ...planGuard, deleteMessageController);
 router.post(
   "/chat/upload",
   ...planGuard,
+  rateLimit(userUploadLimiter, (req) => req.user._id.toString()),
   upload.single("image"),
   validate(uploadChatImageSchema),
   uploadChatImageController

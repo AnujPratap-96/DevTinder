@@ -1,5 +1,4 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
 
 import {
   sendOtpController,
@@ -34,39 +33,30 @@ import {
   revokeSessionSchema,
 } from "../validations/auth.validation.js";
 import SECURITY from "../security/security.config.js"; // [PHASE-3]
+import { authLimiter, otpLimiter, rateLimit } from "../middlewares/rateLimiter.js";
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: "Too many requests from this IP, please try again later." },
-});
-
-const otpRateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 5,
-  message: { error: "Too many OTP requests. Please try again later." },
-  keyGenerator: (req) => req.body?.email ?? req.body?.emailId ?? 'unknown',
-});
+const authByIp = rateLimit(authLimiter, (req) => req.ip);
+const otpByEmail = rateLimit(otpLimiter, (req) => req.body?.email ?? req.body?.emailId ?? "unknown");
 
 const router = Router();
 
-router.post("/send-otp", otpRateLimiter, validate(sendOtpSchema), sendOtpController);
-router.post("/verify-otp", authLimiter, validate(verifyOtpSchema), verifyOtpController);
-router.post("/reset-password", authLimiter, validate(resetPasswordSchema), resetPasswordController);
+router.post("/send-otp", otpByEmail, validate(sendOtpSchema), sendOtpController);
+router.post("/verify-otp", authByIp, validate(verifyOtpSchema), verifyOtpController);
+router.post("/reset-password", authByIp, validate(resetPasswordSchema), resetPasswordController);
 
-router.post("/register", authLimiter, validate(registerSchema), registerController);
+router.post("/register", authByIp, validate(registerSchema), registerController);
 router.post(
   "/complete-signup",
-  authLimiter,
+  authByIp,
   verifySignJWT,
   validate(signupSchema),
   completeSignupController
 );
 
-router.post("/login", authLimiter, validate(loginSchema), loginController);
-router.post("/auth/oauth", authLimiter, validate(oauthLoginSchema), oauthLoginController);
-router.post("/refresh-token", authLimiter, refreshTokenController);
-router.post("/logout", authLimiter, logoutController);
+router.post("/login", authByIp, validate(loginSchema), loginController);
+router.post("/auth/oauth", authByIp, validate(oauthLoginSchema), oauthLoginController);
+router.post("/refresh-token", authByIp, refreshTokenController);
+router.post("/logout", authByIp, logoutController);
 
 // [PHASE-3] two-factor & active session management (flag-gated)
 if (SECURITY.enabled && SECURITY.twoFactor.enabled) {
