@@ -1,11 +1,6 @@
 import { getPlanBySlug } from "../utils/planConfig.js";
+import { AppError } from "../errors/index.js";
 
-/**
- * Gate a route behind a minimum membership tier.
- * `minimumSlug` is the slug of the lowest plan allowed (e.g. "silver").
- * Admins always pass. Plan expiry is already applied in the auth middleware,
- * so req.user.membershipType reflects the *effective* (possibly "free") plan.
- */
 export const requireMinimumPlan = (minimumSlug) => async (req, res, next) => {
   if (req.user?.isAdmin) return next();
 
@@ -21,12 +16,12 @@ export const requireMinimumPlan = (minimumSlug) => async (req, res, next) => {
 
     if (userOrder >= minOrder) return next();
 
-    return res.status(403).json({
-      success: false,
+    return next(new AppError({
       message: `This feature requires a ${minPlan?.name || minimumSlug} plan or higher.`,
-      error: "PLAN_REQUIRED",
-      requiredPlan: minimumSlug,
-    });
+      statusCode: 403,
+      errorCode: "PLAN_REQUIRED",
+      details: { requiredPlan: minimumSlug },
+    }));
   } catch (err) {
     return next(err);
   }

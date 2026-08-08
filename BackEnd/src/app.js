@@ -42,7 +42,7 @@ app.get("/health", (req, res) => {
 
 app.use("/", routes);
 
-// Return tiny JSON for unmatched routes (cron-job.org flags HTML 404 as "too big")
+// Return tiny JSON for unmatched routes (cron-job.org times out / flags HTML 404 as "too big")
 app.use((req, res) => {
   res.status(404).json({ success: false, message: "Route not found" });
 });

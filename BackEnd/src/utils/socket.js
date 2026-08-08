@@ -4,9 +4,12 @@ import Message from "../models/message.js";
 import ConnectionRequest from "../models/connectionRequest.js";
 import User from "../models/user.model.js";
 import { createNotification, formatNotification } from "../repositories/notification.repository.js";
-import { getPlanBySlug } from "./planConfig.js";
+import { getPlanLimits } from "./planConfig.js";
+import initializeCallSocket from "../sockets/call.socket.js";
+import { initializeEnhancementSocket } from "../enhancements/enhancement.socket.js"; // [PHASE-1]
 import config from "../config/env.js";
 import logger from "./logger.js";
+import { buildModerationUpdate } from "../security/moderation.service.js"; // [PHASE-3]
 
 const activeUsers = new Map();
 const offlineTimeouts = new Map();
@@ -17,6 +20,13 @@ const RATE_LIMIT_MAX_MESSAGES = 8;
 const OFFLINE_DELAY_MS = 5000;
 
 let ioInstance = null;
+
+class SocketError extends Error {
+  constructor(message, code = "SOCKET_ERROR") {
+    super(message);
+    this.code = code;
+  }
+}
 
 const registerSocketForUser = (userId, socketInstance) => {
   if (!userId) return;
@@ -85,9 +95,7 @@ const ensureConnection = async (userId, targetUserId) => {
     ],
   }).lean();
   if (!isConnection) {
-    const error = new Error("You are not connected with this user");
-    error.code = "NOT_CONNECTED";
-    throw error;
+    throw new SocketError("You are not connected with this user", "NOT_CONNECTED");
   }
 };
 
@@ -135,6 +143,9 @@ const initializeSocket = (server) => {
   });
   ioInstance = io;
 
+  initializeCallSocket(io);
+  initializeEnhancementSocket(io); // [PHASE-1] chat enhancements (reactions)
+
   io.on("connection", (socketInstance) => {
     socketInstance.on("session:register", async ({ userId }) => {
       if (!userId) return;
@@ -147,22 +158,22 @@ const initializeSocket = (server) => {
 
     socketInstance.on("joinChat", async ({ userId, targetUserId, matchId }) => {
       try {
-        if (!userId) throw new Error("userId is required");
+        if (!userId) throw new SocketError("userId is required", "VALIDATION_ERROR");
         registerSocketForUser(userId, socketInstance);
 
         let chat;
         if (matchId) {
           chat = await Chat.findById(matchId);
-          if (!chat) throw new Error("Conversation not found");
+          if (!chat) throw new SocketError("Conversation not found", "NOT_FOUND");
         } else {
-          if (!targetUserId) throw new Error("targetUserId is required when matchId is not provided");
+          if (!targetUserId) throw new SocketError("targetUserId is required when matchId is not provided", "VALIDATION_ERROR");
           await ensureConnection(userId, targetUserId);
           chat = await Chat.findOrCreateByParticipants(userId, targetUserId);
         }
 
         const participantIds = chat.participants.map((p) => p.toString());
         if (!participantIds.includes(userId.toString())) {
-          throw new Error("You are not part of this conversation");
+          throw new SocketError("You are not part of this conversation", "FORBIDDEN");
         }
 
         const roomId = chat.getRoomId();
@@ -187,7 +198,7 @@ const initializeSocket = (server) => {
           matchId: chat._id,
         });
       } catch (error) {
-        socketInstance.emit("chat:error", { message: error.message });
+        socketInstance.emit("chat:error", { message: error.message, code: error.code });
       }
     });
 
@@ -195,15 +206,16 @@ const initializeSocket = (server) => {
       "sendMessage",
       async ({ userId, targetUserId, matchId, message, messageType = "text", clientMessageId, isEncrypted = true, metadata = {} }) => {
         try {
-        if (!userId) throw new Error("userId is required");
-        if (!clientMessageId) throw new Error("clientMessageId is required");
-        if (!message?.trim()) throw new Error("message is required");
+        if (!userId) throw new SocketError("userId is required", "VALIDATION_ERROR");
+        if (!clientMessageId) throw new SocketError("clientMessageId is required", "VALIDATION_ERROR");
+        if (!message?.trim()) throw new SocketError("message is required", "VALIDATION_ERROR");
 
         const sender = await User.findById(userId).select("membershipType").lean();
-        const senderPlan = await getPlanBySlug(sender?.membershipType || "free");
-        if (!senderPlan?.limits?.canChat) {
+        const senderPlan = await getPlanLimits(sender?.membershipType || "free");
+        if (!senderPlan?.canChat) {
           socketInstance.emit("chat:error", {
             message: "Your plan does not include chat. Upgrade to Silver or Gold to message connections.",
+            code: "PLAN_REQUIRED",
           });
           return;
         }
@@ -211,7 +223,7 @@ const initializeSocket = (server) => {
         registerSocketForUser(userId, socketInstance);
 
           if (isRateLimited(userId.toString())) {
-            socketInstance.emit("chat:error", { message: "You are sending messages too fast" });
+            socketInstance.emit("chat:error", { message: "You are sending messages too fast", code: "RATE_LIMITED" });
             return;
           }
 
@@ -226,21 +238,26 @@ const initializeSocket = (server) => {
 
           if (matchId) {
             chat = await Chat.findById(matchId);
-            if (!chat) throw new Error("Conversation not found");
+            if (!chat) throw new SocketError("Conversation not found", "NOT_FOUND");
             const participants = chat.participants.map((p) => p.toString());
             if (!participants.includes(userId.toString())) {
-              throw new Error("You are not part of this conversation");
+              throw new SocketError("You are not part of this conversation", "FORBIDDEN");
             }
             receiverId = participants.find((id) => id !== userId.toString());
           } else {
-            if (!targetUserId) throw new Error("targetUserId is required when matchId is not provided");
+            if (!targetUserId) throw new SocketError("targetUserId is required when matchId is not provided", "VALIDATION_ERROR");
             await ensureConnection(userId, targetUserId);
             chat = await Chat.findOrCreateByParticipants(userId, targetUserId);
           }
 
           if (!receiverId) {
-            throw new Error("receiver could not be determined");
+            throw new SocketError("receiver could not be determined", "INTERNAL_ERROR");
           }
+
+          // [PHASE-3] Content moderation — flag only, never auto-block.
+          // E2E-encrypted messages are skipped by design (server can't read
+          // them); plaintext text messages get the keyword scan.
+          const moderationUpdate = await buildModerationUpdate({ text: message, messageType });
 
           const newMessage = await Message.create({
             matchId: chat._id,
@@ -251,6 +268,7 @@ const initializeSocket = (server) => {
             isEncrypted: Boolean(isEncrypted),
             clientMessageId,
             metadata,
+            ...moderationUpdate,
           });
 
           const unreadIncKey = `unreadCounts.${receiverId}`;
@@ -285,9 +303,6 @@ const initializeSocket = (server) => {
           const notificationDoc = await createNotification({
             userId: receiverId,
             type: "message.new",
-            // Deliberately omit the message body: it is end-to-end encrypted and
-            // the server must never persist plaintext. No internal ids are sent
-            // either — the client shows a generic "New message" preview.
             payload: {},
           });
           emitToUser(receiverId, "notification:new", formatNotification(notificationDoc));
@@ -295,7 +310,7 @@ const initializeSocket = (server) => {
           io.to(chat.getRoomId()).emit("message:created", formatted);
           socketInstance.emit("message:ack", formatted);
         } catch (error) {
-          socketInstance.emit("chat:error", { message: error.message });
+          socketInstance.emit("chat:error", { message: error.message, code: error.code });
         }
       }
     );
@@ -319,7 +334,7 @@ const initializeSocket = (server) => {
           unreadCounts: updatedChat.unreadCounts,
         });
       } catch (error) {
-        socketInstance.emit("chat:error", { message: error.message });
+        socketInstance.emit("chat:error", { message: error.message, code: error.code });
       }
     });
 
@@ -346,11 +361,6 @@ const initializeSocket = (server) => {
 
 const getIO = () => ioInstance;
 
-/**
- * Emit an event to every connected socket for a given user.
- * Uses the in-memory activeUsers registry (socket ids per user).
- * Returns true if at least one socket received the event.
- */
 const emitToUser = (userId, event, payload) => {
   if (!ioInstance || !userId) return false;
   const userKey = userId.toString();
@@ -362,10 +372,12 @@ const emitToUser = (userId, event, payload) => {
   return true;
 };
 
-export { initializeSocket, getIO, emitToUser };
+export { initializeSocket, getIO, emitToUser, ensureConnection, activeUsers };
 
 export default {
   initializeSocket,
   getIO,
   emitToUser,
+  ensureConnection,
+  activeUsers,
 };

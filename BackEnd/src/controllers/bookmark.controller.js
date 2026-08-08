@@ -7,12 +7,12 @@ export const createBookmarkController = asyncHandler(async (req, res) => {
     userId: req.user._id,
     savedUserId: req.body?.userId,
   });
-  return successResponse(res, { data: { bookmark } });
+  return successResponse(res, { message: "Bookmark created", data: { bookmark } });
 });
 
 export const listBookmarksController = asyncHandler(async (req, res) => {
-  const bookmarks = await listBookmarks(req.user._id);
-  return successResponse(res, { data: { bookmarks } });
+  const data = await listBookmarks(req.user._id, req.query);
+  return successResponse(res, { message: "Bookmarks fetched", data });
 });
 
 export const deleteBookmarkController = asyncHandler(async (req, res) => {
@@ -20,8 +20,5 @@ export const deleteBookmarkController = asyncHandler(async (req, res) => {
     userId: req.user._id,
     savedUserId: req.params.userId,
   });
-  if (!result) {
-    return successResponse(res, { data: { deleted: false } });
-  }
-  return successResponse(res, { data: { deleted: true } });
+  return successResponse(res, { message: "Bookmark deleted", data: { deleted: !!result } });
 });

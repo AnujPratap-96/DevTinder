@@ -1,4 +1,4 @@
-import Plan from "../models/plan.js";
+import * as planRepo from "../repositories/plan.repository.js";
 import { AppError, ValidationError } from "../errors/index.js";
 import { invalidatePlanCache } from "../utils/planConfig.js";
 
@@ -16,15 +16,20 @@ const DEFAULT_PLANS = [
     features: [
       "Browse and discover developers",
       "Send up to 10 connection requests / day",
+      "Invite up to 5 friends / month",
       "Bookmark profiles",
       "Endorse skills",
     ],
     limits: {
       connectionRequestsPerDay: 10,
       aiCallsPerDay: 0,
+      invitesPerMonth: 5,
       canCreateProjects: false,
       canChat: false,
+      canCall: false,
+      canVideoCall: false,
       canViewProfileViews: false,
+      profileViewsLimit: 0,
       blueBadge: false,
       themeAccess: false,
     },
@@ -44,15 +49,20 @@ const DEFAULT_PLANS = [
       "Verified Blue Badge",
       "100 connection requests / day",
       "AI features (20 / day)",
+      "Invite up to 25 friends / month",
       "Create projects",
       "See who viewed your profile",
     ],
     limits: {
       connectionRequestsPerDay: 100,
       aiCallsPerDay: 20,
+      invitesPerMonth: 25,
       canCreateProjects: true,
       canChat: true,
+      canCall: true,
+      canVideoCall: false,
       canViewProfileViews: true,
+      profileViewsLimit: 6,
       blueBadge: true,
       themeAccess: false,
     },
@@ -72,6 +82,7 @@ const DEFAULT_PLANS = [
       "Verified Blue Badge",
       "500 connection requests / day",
       "AI features (unlimited)",
+      "Invite up to 100 friends / month",
       "Create projects",
       "See who viewed your profile",
       "All premium themes",
@@ -79,9 +90,13 @@ const DEFAULT_PLANS = [
     limits: {
       connectionRequestsPerDay: 500,
       aiCallsPerDay: null,
+      invitesPerMonth: 100,
       canCreateProjects: true,
       canChat: true,
+      canCall: true,
+      canVideoCall: true,
       canViewProfileViews: true,
+      profileViewsLimit: null,
       blueBadge: true,
       themeAccess: true,
     },
@@ -90,22 +105,28 @@ const DEFAULT_PLANS = [
 
 export const seedDefaultPlans = async () => {
   for (const plan of DEFAULT_PLANS) {
-    // Only create plans that don't exist yet. $setOnInsert ensures we never
-    // overwrite admin edits (price, features, limits, etc.) on restart/deploy.
-    await Plan.findOneAndUpdate(
+    await planRepo.upsertPlan(
       { slug: plan.slug },
-      { $setOnInsert: plan },
-      { upsert: true, setDefaultsOnInsert: true }
+      { $setOnInsert: plan }
     );
+    await planRepo.updatePlan({ slug: plan.slug }, {
+      $set: {
+        "limits.canCall": plan.limits.canCall,
+        "limits.canVideoCall": plan.limits.canVideoCall,
+        "limits.canChat": plan.limits.canChat,
+        "limits.invitesPerMonth": plan.limits.invitesPerMonth,
+        "limits.profileViewsLimit": plan.limits.profileViewsLimit,
+      },
+    });
   }
 };
 
 export const listPlans = async () => {
-  return Plan.find().sort({ order: 1 }).lean();
+  return planRepo.findPlans();
 };
 
 export const listActivePlans = async () => {
-  return Plan.find({ isActive: true }).sort({ order: 1 }).lean();
+  return planRepo.findPlans({ isActive: true });
 };
 
 const sanitizePlanInput = (body = {}) => {
@@ -135,7 +156,6 @@ const sanitizePlanInput = (body = {}) => {
   if (order !== undefined) data.order = Number(order) || 0;
   if (isActive !== undefined) data.isActive = Boolean(isActive);
   if (isFree !== undefined) data.isFree = Boolean(isFree);
-  // Free plans always have price 0 and are always active.
   if (data.isFree) {
     data.price = 0;
     data.isActive = true;
@@ -158,9 +178,13 @@ const sanitizePlanInput = (body = {}) => {
     data.limits = {
       connectionRequestsPerDay: numOrNull(l.connectionRequestsPerDay),
       aiCallsPerDay: numOrNull(l.aiCallsPerDay),
+      invitesPerMonth: numOrNull(l.invitesPerMonth),
       canCreateProjects: Boolean(l.canCreateProjects),
       canChat: Boolean(l.canChat),
+      canCall: Boolean(l.canCall),
+      canVideoCall: Boolean(l.canVideoCall),
       canViewProfileViews: Boolean(l.canViewProfileViews),
+      profileViewsLimit: numOrNull(l.profileViewsLimit),
       blueBadge: Boolean(l.blueBadge),
       themeAccess: Boolean(l.themeAccess),
     };
@@ -174,18 +198,18 @@ export const createPlan = async (body) => {
     throw new ValidationError("A valid slug (lowercase letters/numbers/dashes) is required");
   }
   const cleanSlug = String(slug).toLowerCase();
-  if (await Plan.findOne({ slug: cleanSlug })) {
+  if (await planRepo.findPlan({ slug: cleanSlug })) {
     throw new ValidationError(`Plan with slug "${cleanSlug}" already exists`);
   }
   const data = sanitizePlanInput(body);
   data.slug = cleanSlug;
-  const plan = await Plan.create(data);
+  const plan = await planRepo.createPlan(data);
   invalidatePlanCache();
   return plan;
 };
 
 export const updatePlan = async (id, body) => {
-  const plan = await Plan.findById(id);
+  const plan = await planRepo.findPlanById(id);
   if (!plan) throw new AppError({ message: "Plan not found", statusCode: 404 });
   if (plan.isFree && body?.price !== undefined && Number(body.price) > 0) {
     throw new ValidationError("The free plan price must stay 0");
@@ -198,7 +222,7 @@ export const updatePlan = async (id, body) => {
 };
 
 export const deletePlan = async (id) => {
-  const plan = await Plan.findById(id);
+  const plan = await planRepo.findPlanById(id);
   if (!plan) throw new AppError({ message: "Plan not found", statusCode: 404 });
   if (plan.isFree) {
     throw new ValidationError("The free plan cannot be deleted");

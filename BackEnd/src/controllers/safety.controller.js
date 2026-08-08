@@ -8,9 +8,8 @@ export const blockUserController = asyncHandler(async (req, res) => {
     userId: req.user._id,
     targetUserId: userId,
   });
-  return successResponse(res, { message: "User blocked", data: result });
+  return successResponse(res, { message: "User blocked", data: { block: result } });
 });
-
 
 export const reportUserController = asyncHandler(async (req, res) => {
   const { userId, reason, details } = req.body ?? {};

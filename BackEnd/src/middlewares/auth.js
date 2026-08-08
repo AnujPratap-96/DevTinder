@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 
 import config from "../config/env.js";
-import User from "../models/user.model.js";
+import { findUserById } from "../repositories/user.repository.js";
 import { AppError } from "../errors/index.js";
 
 export const userAuth = async (req, res, next) => {
@@ -19,7 +19,7 @@ export const userAuth = async (req, res, next) => {
 
   try {
     const decode = await jwt.verify(token, config.jwt.secret);
-    const user = await User.findById(decode._id);
+    const user = await findUserById(decode._id);
     if (!user) {
       throw new AppError({
         message: "User not found",

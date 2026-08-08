@@ -212,6 +212,24 @@ location: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
+    refreshToken: {
+      type: String,
+      default: null,
+    },
+    // ── [PHASE-3] trust, safety & account security ────────────────────────
+    // Mirrors the TwoFactor collection (secret lives there, never on the user
+    // doc). Exposed to clients so the UI can show 2FA status without leaking
+    // any key material.
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    // Privacy toggles. hideProfileViews = anonymized browsing: the user's own
+    // profile visits are not recorded.
+    privacy: {
+      hideProfileViews: { type: Boolean, default: false },
+    },
+    // ── [/PHASE-3] ────────────────────────────────────────────────────────
     socialLinks: {
       github: { type: String, trim: true },
       linkedin: { type: String, trim: true },
@@ -253,6 +271,18 @@ userSchema.methods.getJWT = async function () {
   }
   const token = await jwt.sign({ _id: user._id }, secret, {
     expiresIn: config.jwt.expiresIn,
+  });
+  return token;
+};
+
+userSchema.methods.getRefreshJWT = async function () {
+  const user = this;
+  const secret = config.jwt.refreshSecret;
+  if (!secret) {
+    throw new Error("JWT refresh secret is not configured");
+  }
+  const token = await jwt.sign({ _id: user._id }, secret, {
+    expiresIn: config.jwt.refreshExpiresIn,
   });
   return token;
 };

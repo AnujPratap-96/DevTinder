@@ -13,12 +13,21 @@ const uploadImageCloudinary = async (image) => {
     const buffer = image.buffer;
     const uploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader
-        .upload_stream({ folder: "DevTinder" }, (error, result) => {
-          if (error) {
-            return reject(error);
+        .upload_stream(
+          {
+            folder: "DevTinder",
+            // Cap source uploads + let Cloudinary auto-optimize delivery.
+            // Clients additionally request on-the-fly w_/q_auto/f_auto via
+            // `optimizePhotoUrl`, so stored originals stay reasonable.
+            transformation: [{ width: 1200, crop: "limit", quality: "auto", fetch_format: "auto" }],
+          },
+          (error, result) => {
+            if (error) {
+              return reject(error);
+            }
+            return resolve(result);
           }
-          return resolve(result);
-        })
+        )
         .end(buffer);
     });
 

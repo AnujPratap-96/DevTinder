@@ -27,7 +27,11 @@ const messageSchema = new mongoose.Schema(
     message: {
       type: String,
       trim: true,
-      required: true,
+      // `call` entries carry their details in `metadata.callDetails` and have
+      // no textual body — every other message type still requires text.
+      required: function () {
+        return this.messageType !== "call";
+      },
     },
     // When true the `message` field holds base64(iv|ciphertext) produced
     // client-side; the server never sees plaintext. Legacy/redacted rows are
@@ -38,9 +42,35 @@ const messageSchema = new mongoose.Schema(
     },
     messageType: {
       type: String,
-      enum: ["text", "image", "file"],
+      enum: ["text", "image", "file", "call", "audio"],
       default: "text",
     },
+    // ── [PHASE-1] additive fields ──────────────────────────────────────────
+    // Emoji reactions (one entry per user per emoji).
+    reactions: {
+      type: [
+        {
+          userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+          emoji: { type: String, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
+    // Timestamp set when the sender pins the message (null = not pinned).
+    pinnedAt: {
+      type: Date,
+      default: null,
+    },
+    // ── [/PHASE-1] ────────────────────────────────────────────────────────
+    // ── [PHASE-3] moderation flags (flag-only, never auto-block) ──────────
+    moderation: {
+      flagged: { type: Boolean, default: false },
+      flags: { type: [String], default: [] },
+      reviewedAt: { type: Date, default: null },
+      reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    },
+    // ── [/PHASE-3] ────────────────────────────────────────────────────────
     delivered: {
       type: Boolean,
       default: false,

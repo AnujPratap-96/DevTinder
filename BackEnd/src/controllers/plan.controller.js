@@ -10,12 +10,12 @@ import {
 
 export const listPlansController = asyncHandler(async (req, res) => {
   const plans = await listPlans();
-  return successResponse(res, { data: { plans } });
+  return successResponse(res, { message: "Plans fetched", data: { plans } });
 });
 
 export const listActivePlansController = asyncHandler(async (req, res) => {
   const plans = await listActivePlans();
-  return successResponse(res, { data: { plans } });
+  return successResponse(res, { message: "Active plans fetched", data: { plans } });
 });
 
 export const createPlanController = asyncHandler(async (req, res) => {
@@ -30,5 +30,5 @@ export const updatePlanController = asyncHandler(async (req, res) => {
 
 export const deletePlanController = asyncHandler(async (req, res) => {
   await deletePlan(req.params.id);
-  return successResponse(res, { message: "Plan deleted" });
+  return successResponse(res, { message: "Plan deleted", data: { deleted: true } });
 });

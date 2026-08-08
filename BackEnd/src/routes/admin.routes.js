@@ -12,30 +12,75 @@ import {
   createPlanController,
   updatePlanController,
   deletePlanController,
+  listFlaggedMessagesController, // [PHASE-3]
+  reviewFlaggedMessageController, // [PHASE-3]
 } from "../controllers/admin.controller.js";
 import { userAuth } from "../middlewares/auth.js";
+import validate from "../middlewares/validate.js";
+import { banUserSchema, resolveReportSchema } from "../validations/admin.validation.js";
+import { createPlanSchema, updatePlanSchema, planIdParamsSchema } from "../validations/plan.validation.js";
 
 const router = Router();
 
-// Users
 router.get("/admin/users", userAuth, ensureAdmin, listUsersController);
 router.get("/admin/users/:userId", userAuth, ensureAdmin, getUserController);
 
-// Reports
 router.get("/admin/reports", userAuth, ensureAdmin, listReportsController);
-router.patch("/admin/reports/:id", userAuth, ensureAdmin, resolveReportController);
+router.patch(
+  "/admin/reports/:id",
+  userAuth,
+  ensureAdmin,
+  validate(resolveReportSchema),
+  resolveReportController
+);
 
-// Banned
 router.get("/admin/banned", userAuth, ensureAdmin, listBannedController);
-router.post("/admin/unban", userAuth, ensureAdmin, unbanUserController);
+router.post(
+  "/admin/unban",
+  userAuth,
+  ensureAdmin,
+  validate(banUserSchema),
+  unbanUserController
+);
 
-// Ban
-router.post("/admin/ban", userAuth, ensureAdmin, banUserController);
+// [PHASE-3] moderation review queue
+router.get("/admin/moderation/flagged", userAuth, ensureAdmin, listFlaggedMessagesController);
+router.post(
+  "/admin/moderation/:messageId/review",
+  userAuth,
+  ensureAdmin,
+  reviewFlaggedMessageController
+);
 
-// Plans (admin-managed)
+router.post(
+  "/admin/ban",
+  userAuth,
+  ensureAdmin,
+  validate(banUserSchema),
+  banUserController
+);
+
 router.get("/admin/plans", userAuth, ensureAdmin, listPlansController);
-router.post("/admin/plans", userAuth, ensureAdmin, createPlanController);
-router.patch("/admin/plans/:id", userAuth, ensureAdmin, updatePlanController);
-router.delete("/admin/plans/:id", userAuth, ensureAdmin, deletePlanController);
+router.post(
+  "/admin/plans",
+  userAuth,
+  ensureAdmin,
+  validate(createPlanSchema),
+  createPlanController
+);
+router.patch(
+  "/admin/plans/:id",
+  userAuth,
+  ensureAdmin,
+  validate(updatePlanSchema),
+  updatePlanController
+);
+router.delete(
+  "/admin/plans/:id",
+  userAuth,
+  ensureAdmin,
+  validate(planIdParamsSchema),
+  deletePlanController
+);
 
 export default router;

@@ -5,12 +5,10 @@ import {
   findUserById,
   updateUserById,
 } from "../repositories/user.repository.js";
-import {
-  findViewsByViewedUserId,
-  upsertProfileView,
-} from "../repositories/profileView.repository.js";
+import * as profileViewRepo from "../repositories/profileView.repository.js";
 import uploadImageCloudinary from "../utils/cloudinary.js";
 import { AppError, ValidationError } from "../errors/index.js";
+import SECURITY from "../security/security.config.js"; // [PHASE-3]
 
 export const getSelfProfile = async (user) => {
   user.calculateProfileStrength();
@@ -100,19 +98,55 @@ export const updateAvailability = async (user, availability) => {
   return availability;
 };
 
-export const getProfileViews = (userId) => {
-  return findViewsByViewedUserId(userId);
+export const getProfileViews = async (userId, { limit = 20, cursor = null } = {}, planLimit = null) => {
+  const totalViews = await profileViewRepo.countViewsByViewedUserId(userId);
+
+  if (planLimit === 0) {
+    return { views: [], totalViews, nextCursor: null, hasMore: false, profileViewsLimit: 0 };
+  }
+
+  let effectiveLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+  if (typeof planLimit === "number" && planLimit > 0) {
+    const servedBefore = cursor ? await profileViewRepo.countViewsBefore(userId, cursor) : 0;
+    const remaining = planLimit - servedBefore;
+    if (remaining <= 0) {
+      return { views: [], totalViews, nextCursor: null, hasMore: false, profileViewsLimit: planLimit };
+    }
+    effectiveLimit = Math.min(effectiveLimit, remaining);
+  }
+
+  const { views, nextCursor, hasMore } = await profileViewRepo.findViewsByViewedUserId(userId, {
+    limit: effectiveLimit,
+    cursor,
+  });
+  return { views, nextCursor, hasMore, totalViews, profileViewsLimit: planLimit ?? null };
 };
 
-export const recordProfileView = async ({ viewerId, viewedUserId }) => {
+export const recordProfileView = async ({ viewerId, viewedUserId, anonymize = false }) => {
   if (viewerId.toString() === viewedUserId.toString()) {
     return { recorded: false };
   }
-  await upsertProfileView(viewerId, viewedUserId);
+  // [PHASE-3] anonymized browsing: the viewer opted out of being recorded.
+  if (SECURITY.enabled && SECURITY.anonymizedBrowsing.enabled && anonymize) {
+    return { recorded: false, anonymized: true };
+  }
+  await profileViewRepo.upsertProfileView(viewerId, viewedUserId);
   return { recorded: true };
 };
 
-export const getUserProfile = async ({ userId, viewerId }) => {
+export const updatePrivacy = async ({ userId, hideProfileViews }) => {
+  const updated = await updateUserById(
+    userId,
+    { $set: { "privacy.hideProfileViews": Boolean(hideProfileViews) } },
+    { runValidators: true, returnDocument: "after" }
+  );
+  if (!updated) {
+    throw new AppError({ message: "User not found", statusCode: 404 });
+  }
+  return { hideProfileViews: updated.privacy?.hideProfileViews ?? false };
+};
+
+export const getUserProfile = async ({ userId, viewerId, viewer }) => {
   if (userId === viewerId.toString()) {
     throw new ValidationError("Use /profile/view for self");
   }
@@ -122,6 +156,14 @@ export const getUserProfile = async ({ userId, viewerId }) => {
     throw new AppError({ message: "Profile not found", statusCode: 404 });
   }
 
-  await upsertProfileView(viewerId, userId);
+  // [PHASE-3] anonymized browsing: skip recording when the viewer has the
+  // privacy toggle on.
+  const anonymize =
+    SECURITY.enabled &&
+    SECURITY.anonymizedBrowsing.enabled &&
+    !!viewer?.privacy?.hideProfileViews;
+  if (!anonymize) {
+    await profileViewRepo.upsertProfileView(viewerId, userId);
+  }
   return profile;
 };

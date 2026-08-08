@@ -1,0 +1,292 @@
+import { emitToUser, ensureConnection, activeUsers } from "../utils/socket.js";
+import { getPlanLimits } from "../utils/planConfig.js";
+import User from "../models/user.model.js";
+import Chat from "../models/chat.js";
+import Message from "../models/message.js";
+import * as callService from "../services/call.service.js";
+import * as callManager from "../services/callManager.js";
+import config from "../config/env.js";
+import logger from "../utils/logger.js";
+import { randomUUID } from "crypto";
+
+const inviteTimeouts = new Map();
+
+const INVITE_RATE_WINDOW_MS = 30000;
+const INVITE_RATE_MAX = 10;
+const inviteTimestamps = new Map();
+
+class CallSocketError extends Error {
+  constructor(message, code = "CALL_ERROR") {
+    super(message);
+    this.code = code;
+  }
+}
+
+const isInviteRateLimited = (userId) => {
+  const now = Date.now();
+  const arr = inviteTimestamps.get(userId) ?? [];
+  const recent = arr.filter((t) => now - t < INVITE_RATE_WINDOW_MS);
+  recent.push(now);
+  inviteTimestamps.set(userId, recent);
+  return recent.length > INVITE_RATE_MAX;
+};
+
+const clearInviteTimeout = (callId) => {
+  const t = inviteTimeouts.get(callId);
+  if (t) {
+    clearTimeout(t);
+    inviteTimeouts.delete(callId);
+  }
+};
+
+const createCallMessage = async ({ io, chatId, callerId, calleeId, callId, type, status, durationSec }) => {
+  if (!chatId) return null;
+  const clientMessageId = `call-${callId}-${status}`;
+  const exists = await Message.findOne({ clientMessageId });
+  if (exists) return exists;
+  const msg = await Message.create({
+    matchId: chatId,
+    senderId: callerId,
+    receiverId: calleeId,
+    clientMessageId,
+    message: "",
+    isEncrypted: false,
+    messageType: "call",
+    metadata: {
+      callDetails: { type, status, durationSec: durationSec || 0 },
+    },
+  });
+  await Chat.findByIdAndUpdate(chatId, { $set: { lastMessageAt: msg.createdAt || new Date() } });
+  const populated = await Message.findById(msg._id).populate("senderId", "firstName lastName photoUrl").lean();
+  if (io) io.to(chatId.toString()).emit("message:created", populated);
+  return populated;
+};
+
+const scheduleMissed = (io, callId) => {
+  const t = setTimeout(async () => {
+    inviteTimeouts.delete(callId);
+    try {
+      const session = await callService.endCall(callId, "timeout");
+      if (session) {
+        createCallMessage({
+          io,
+          chatId: session.chatId,
+          callerId: session.callerId,
+          calleeId: session.calleeId,
+          callId,
+          type: session.type,
+          status: "missed",
+        });
+        emitToUser(session.calleeId, "call:missed", {
+          callId,
+          type: session.type,
+          caller: { _id: session.callerId },
+        });
+        emitToUser(session.callerId, "call:end", { callId, reason: "timeout" });
+      }
+    } catch (err) {
+      logger.warn("call:timeout handling failed", err);
+    }
+  }, config.webrtc.callTimeoutMs);
+  inviteTimeouts.set(callId, t);
+};
+
+const otherParty = (call, userId) =>
+  call.callerId === userId.toString() ? call.calleeId : call.callerId;
+
+export const initializeCallSocket = (io) => {
+  io.on("connection", (socket) => {
+    socket.on("call:invite", async ({ calleeId, type = "voice", chatId } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) {
+        socket.emit("call:error", { message: "Not authenticated", code: "UNAUTHENTICATED" });
+        return;
+      }
+      try {
+        if (!["voice", "video"].includes(type)) throw new CallSocketError("Invalid call type", "VALIDATION_ERROR");
+        if (!calleeId) throw new CallSocketError("calleeId is required", "VALIDATION_ERROR");
+
+        await ensureConnection(userId, calleeId);
+
+        if (isInviteRateLimited(userId)) {
+          socket.emit("call:error", {
+            message: "Too many call attempts. Please wait a moment.",
+            code: "RATE_LIMITED",
+          });
+          return;
+        }
+
+        const caller = await User.findById(userId).select("firstName lastName photoUrl membershipType").lean();
+        const planLimits = await getPlanLimits(caller?.membershipType || "free");
+        const allowed = type === "video" ? planLimits.canVideoCall : planLimits.canCall;
+        if (!allowed) {
+          socket.emit("call:error", {
+            message: `Your plan does not include ${type} calls. Upgrade to enable calling.`,
+            code: "PLAN_REQUIRED",
+          });
+          return;
+        }
+
+        if (!activeUsers.has(calleeId.toString())) {
+          socket.emit("call:unavailable", { message: "User is not reachable right now." });
+          return;
+        }
+        if (callManager.isUserInCall(calleeId) || callManager.isUserInCall(userId)) {
+          socket.emit("call:busy", { message: "User is busy on another call." });
+          return;
+        }
+
+        const session = await callService.startCall({
+          callerId: userId,
+          calleeId,
+          type,
+          chatId,
+        });
+
+        const delivered = emitToUser(calleeId, "call:invite", {
+          callId: session.callId,
+          type: session.type,
+          caller: {
+            _id: caller._id,
+            firstName: caller.firstName,
+            lastName: caller.lastName,
+            photoUrl: caller.photoUrl,
+          },
+          chatId: session.chatId,
+        });
+        socket.emit("call:created", {
+          callId: session.callId,
+          type: session.type,
+          calleeId,
+        });
+
+        scheduleMissed(io, session.callId);
+      } catch (err) {
+        logger.warn("[call] invite failed from=%s to=%s err=%s", userId, calleeId, err.message);
+        socket.emit("call:error", { message: err.message, code: err.code });
+      }
+    });
+
+    socket.on("call:accept", async ({ callId } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
+      try {
+        const call = callManager.getCall(callId);
+        if (!call || call.calleeId !== userId.toString()) {
+          socket.emit("call:error", { message: "Invalid call", code: "INVALID_CALL" });
+          return;
+        }
+        await callService.acceptCall(callId);
+        clearInviteTimeout(callId);
+        emitToUser(call.callerId, "call:accept", { callId });
+      } catch (err) {
+        socket.emit("call:error", { message: err.message, code: err.code });
+      }
+    });
+
+    socket.on("call:decline", async ({ callId } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
+      try {
+        const call = callManager.getCall(callId);
+        if (!call || call.calleeId !== userId.toString()) return;
+        await callService.endCall(callId, "decline");
+        clearInviteTimeout(callId);
+        createCallMessage({
+          io,
+          chatId: call.chatId,
+          callerId: call.callerId,
+          calleeId: call.calleeId,
+          callId,
+          type: call.type,
+          status: "declined",
+        });
+        emitToUser(call.callerId, "call:decline", { callId });
+      } catch (err) {
+        socket.emit("call:error", { message: err.message, code: err.code });
+      }
+    });
+
+    socket.on("call:offer", ({ callId, sdp } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
+      const call = callManager.getCall(callId);
+      if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
+      emitToUser(otherParty(call, userId), "call:offer", { callId, sdp });
+    });
+
+    socket.on("call:answer", ({ callId, sdp } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
+      const call = callManager.getCall(callId);
+      if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
+      emitToUser(otherParty(call, userId), "call:answer", { callId, sdp });
+    });
+
+    socket.on("call:ice-candidate", ({ callId, candidate } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
+      const call = callManager.getCall(callId);
+      if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
+      emitToUser(otherParty(call, userId), "call:ice-candidate", { callId, candidate });
+    });
+
+    socket.on("call:end", async ({ callId, reason = "hangup" } = {}) => {
+      const userId = socket.data.userId;
+      if (!userId) return;
+      try {
+        const call = callManager.getCall(callId);
+        if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
+        const session = await callService.endCall(callId, reason);
+        clearInviteTimeout(callId);
+        emitToUser(otherParty(call, userId), "call:end", { callId, reason });
+        if (!session) return;
+        // Instagram-style: exactly one chat entry per call.
+        // - answered calls → "Call ended · m:ss"
+        // - calls that ended while still ringing (caller hung up / timeout)
+        //   → "Missed call"
+        // - declined calls are handled by `call:decline`.
+        if (session.connectedAt) {
+          createCallMessage({
+            io,
+            chatId: call.chatId || session.chatId,
+            callerId: call.callerId,
+            calleeId: call.calleeId,
+            callId,
+            type: call.type,
+            status: "ended",
+            durationSec: session.durationSec || 0,
+          });
+        } else if (session.status !== "declined") {
+          createCallMessage({
+            io,
+            chatId: call.chatId || session.chatId,
+            callerId: call.callerId,
+            calleeId: call.calleeId,
+            callId,
+            type: call.type,
+            status: "missed",
+            durationSec: 0,
+          });
+        }
+      } catch (err) {
+        socket.emit("call:error", { message: err.message, code: err.code });
+      }
+    });
+
+    socket.on("disconnect", () => {
+      const userId = socket.data.userId;
+      if (!userId) return;
+      const callId = callManager.getActiveCallIdForUser(userId);
+      if (!callId) return;
+      const call = callManager.getCall(callId);
+      callManager.removeCall(callId);
+      if (call) {
+        const other = call.callerId === userId.toString() ? call.calleeId : call.callerId;
+        emitToUser(other, "call:end", { callId, reason: "disconnected" });
+      }
+    });
+  });
+};
+
+export default initializeCallSocket;

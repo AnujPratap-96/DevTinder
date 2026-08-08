@@ -39,6 +39,8 @@ const config = {
   jwt: {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+    refreshSecret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
   },
   signupJwt: {
     secret: process.env.JWT_SECRET,
@@ -67,6 +69,16 @@ const config = {
   },
   github: {
     appUrl: process.env.APP_URL,
+  },
+  webrtc: {
+    stunUrls: toArray(process.env.STUN_URLS) || ["stun:stun.l.google.com:19302"],
+    turnUrls: toArray(process.env.TURN_URLS) || [],
+    turnSecret: process.env.TURN_SECRET || null,
+    turnTtlSec: toNumber(process.env.TURN_TTL_SEC, 600),
+    turnFallback: process.env.TURN_FALLBACK !== "false",
+    callTimeoutMs: toNumber(process.env.CALL_TIMEOUT_MS, 10000),
+    callConnectTimeoutMs: toNumber(process.env.CALL_CONNECT_TIMEOUT_MS, 10000),
+    callIceRestartMs: toNumber(process.env.CALL_ICE_RESTART_MS, 5000),
   },
   requestJsonLimit: process.env.REQUEST_JSON_LIMIT,
 };

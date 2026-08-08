@@ -1,5 +1,3 @@
-import Project from "../models/project.js";
-import User from "../models/user.model.js";
 import {
   generateBio,
   suggestSkills,
@@ -13,7 +11,9 @@ import {
 } from "../services/aiService.js";
 import { successResponse } from "../utils/response.js";
 import { asyncHandler } from "../utils/async-handler.js";
-import { ValidationError, NotFoundError } from "../errors/index.js";
+import { ValidationError } from "../errors/index.js";
+import { findUserById } from "../repositories/user.repository.js";
+import { findProjectById, saveProject } from "../repositories/project.repository.js";
 
 export const collaborationActivityController = asyncHandler(async (req, res) => {
   const { targetUserId } = req.body ?? {};
@@ -21,13 +21,13 @@ export const collaborationActivityController = asyncHandler(async (req, res) => 
     throw new ValidationError("targetUserId is required");
   }
 
-  const targetUser = await User.findById(targetUserId).select("firstName skills role").lean();
+  const targetUser = await findUserById(targetUserId).select("firstName skills role").lean();
   if (!targetUser) {
-    throw new NotFoundError("User");
+    throw new ValidationError("Target user not found");
   }
 
   const result = await suggestCollaborationActivity({ userA: req.user, userB: targetUser });
-  return successResponse(res, { data: result });
+  return successResponse(res, { message: "Collaboration suggestions ready", data: result });
 });
 
 export const generateBioController = asyncHandler(async (req, res) => {
@@ -44,7 +44,7 @@ export const generateBioController = asyncHandler(async (req, res) => {
   }
 
   const bio = await generateBio(payload);
-  return successResponse(res, { data: { bio } });
+  return successResponse(res, { message: "Bio generated", data: bio });
 });
 
 export const suggestSkillsController = asyncHandler(async (req, res) => {
@@ -56,7 +56,7 @@ export const suggestSkillsController = asyncHandler(async (req, res) => {
   };
 
   const suggestions = await suggestSkills(payload);
-  return successResponse(res, { data: { suggestions } });
+  return successResponse(res, { message: "Skill suggestions ready", data: suggestions });
 });
 
 export const generateIcebreakerController = asyncHandler(async (req, res) => {
@@ -65,16 +65,16 @@ export const generateIcebreakerController = asyncHandler(async (req, res) => {
     throw new ValidationError("receiverId is required");
   }
 
-  const receiver = await User.findById(receiverId)
+  const receiver = await findUserById(receiverId)
     .select("firstName skills role experienceYears")
     .lean();
 
   if (!receiver) {
-    throw new NotFoundError("Receiver");
+    throw new ValidationError("Receiver not found");
   }
 
   const message = await generateIcebreaker({ sender: req.user, receiver });
-  return successResponse(res, { data: { message } });
+  return successResponse(res, { message: "Icebreaker generated", data: message });
 });
 
 export const explainMatchController = asyncHandler(async (req, res) => {
@@ -83,16 +83,16 @@ export const explainMatchController = asyncHandler(async (req, res) => {
     throw new ValidationError("targetUserId is required");
   }
 
-  const targetUser = await User.findById(targetUserId)
+  const targetUser = await findUserById(targetUserId)
     .select("firstName skills role experienceYears")
     .lean();
 
   if (!targetUser) {
-    throw new NotFoundError("User");
+    throw new ValidationError("Target user not found");
   }
 
   const points = await explainMatch({ userA: req.user, userB: targetUser });
-  return successResponse(res, { data: { points } });
+  return successResponse(res, { message: "Match explanation ready", data: points });
 });
 
 export const projectDescriptionController = asyncHandler(async (req, res) => {
@@ -101,7 +101,7 @@ export const projectDescriptionController = asyncHandler(async (req, res) => {
     throw new ValidationError("title is required to generate a description.");
   }
   const description = await generateProjectDescription({ title, techStack });
-  return successResponse(res, { data: { description } });
+  return successResponse(res, { message: "Project description generated", data: description });
 });
 
 export const projectTechStackController = asyncHandler(async (req, res) => {
@@ -110,7 +110,7 @@ export const projectTechStackController = asyncHandler(async (req, res) => {
     throw new ValidationError("Provide either title or description to suggest a tech stack.");
   }
   const suggestions = await suggestProjectTechStack({ title, description });
-  return successResponse(res, { data: { suggestions } });
+  return successResponse(res, { message: "Tech stack suggestions ready", data: suggestions });
 });
 
 export const projectRoadmapController = asyncHandler(async (req, res) => {
@@ -120,9 +120,10 @@ export const projectRoadmapController = asyncHandler(async (req, res) => {
   }
 
   if (projectId && !forceRefresh) {
-    const project = await Project.findById(projectId).select("roadmap");
+    const project = await findProjectById(projectId).select("roadmap");
     if (project?.roadmap?.length) {
       return successResponse(res, {
+        message: "Roadmap loaded from cache",
         data: { roadmap: project.roadmap, source: "cache" },
       });
     }
@@ -131,10 +132,14 @@ export const projectRoadmapController = asyncHandler(async (req, res) => {
   const roadmap = await generateProjectRoadmap({ title, description, techStack });
 
   if (projectId) {
-    await Project.findByIdAndUpdate(projectId, { $set: { roadmap } });
+    const project = await findProjectById(projectId);
+    if (project) {
+      project.roadmap = roadmap;
+      await saveProject(project);
+    }
   }
 
-  return successResponse(res, { data: { roadmap, source: "ai" } });
+  return successResponse(res, { message: "Roadmap generated", data: { roadmap, source: "ai" } });
 });
 
 export const githubSyncController = asyncHandler(async (req, res) => {
@@ -148,7 +153,6 @@ export const githubSyncController = asyncHandler(async (req, res) => {
     throw new ValidationError("GitHub username is required (or connect it in profile)");
   }
 
-  // Persist token if provided
   if (githubToken && githubToken !== user.githubProfile?.token) {
     user.githubProfile = {
       ...user.githubProfile,
@@ -158,26 +162,19 @@ export const githubSyncController = asyncHandler(async (req, res) => {
     await user.save();
   }
 
-  // Perform AI Sync
   const result = await syncGitHubData(username, token);
 
-  // Auto-persist the synced data to the profile
   if (result.bio) user.about = result.bio;
   if (result.skills?.length) {
-    // Merge or replace? Replacing is usually what's expected from a "Full Sync"
     user.skills = result.skills;
   }
-  
+
   user.githubProfile.lastSyncedAt = new Date();
   await user.save();
 
-  return successResponse(res, { 
+  return successResponse(res, {
     message: "Profile synced with GitHub successfully",
-    data: { 
-      bio: result.bio, 
-      skills: result.skills,
-      user 
-    } 
+    data: result,
   });
 });
 
@@ -192,5 +189,5 @@ export const projectSuggestionsController = asyncHandler(async (req, res) => {
     suggestProjectTechStack({ title }),
   ]);
 
-  return successResponse(res, { data: { description, techStack } });
+  return successResponse(res, { message: "Project suggestions ready", data: { description, techStack } });
 });

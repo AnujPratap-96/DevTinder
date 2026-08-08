@@ -1,11 +1,11 @@
 import crypto from "crypto";
 
-import Otp from "../models/otp.model.js";
+import * as otpRepo from "../repositories/otp.repository.js";
 import { sendOtpEmail } from "../utils/sendOtp.js";
 import generateOtp from "../utils/generateOtp.js";
 import logger from "../utils/logger.js";
+import { AppError } from "../errors/index.js";
 
-const OTP_EXPIRY_SECONDS = 300;
 const MAX_ATTEMPTS = 5;
 const RATE_LIMIT_MS = 30000;
 const HOURLY_LIMIT = 5;
@@ -56,16 +56,16 @@ export const generateOtpService = async (email, purpose) => {
   const rateCheck = canSendOtp(emailLower, purpose);
   if (!rateCheck.allowed) {
     if (rateCheck.cooldown) {
-      throw new Error("Please wait 30 seconds before requesting another OTP");
+      throw new AppError({ message: "Please wait 30 seconds before requesting another OTP", statusCode: 429, errorCode: "OTP_COOLDOWN" });
     }
-    throw new Error("Too many OTP requests. Please try again later.");
+    throw new AppError({ message: "Too many OTP requests. Please try again later.", statusCode: 429, errorCode: "OTP_LIMIT_REACHED" });
   }
 
-  await Otp.deleteMany({ emailId: emailLower, purpose, verified: false });
+  await otpRepo.deleteOtps({ emailId: emailLower, purpose, verified: false });
 
   const { otp, otpHash } = generateOtp();
 
-  await Otp.create({
+  await otpRepo.createOtp({
     emailId: emailLower,
     otp: otpHash,
     purpose,
@@ -86,25 +86,25 @@ export const verifyOtpService = async (email, otp, purpose) => {
   const emailLower = email.toLowerCase().trim();
   const hashedOtp = hashOtp(otp);
 
-  const otpDoc = await Otp.findOne({
+  const otpDoc = await otpRepo.findOtp({
     emailId: emailLower,
     purpose,
     verified: false,
   });
 
   if (!otpDoc) {
-    throw new Error("OTP expired or not found. Please request a new OTP.");
+    throw new AppError({ message: "OTP expired or not found. Please request a new OTP.", statusCode: 400, errorCode: "OTP_INVALID" });
   }
 
   if (otpDoc.attempts >= MAX_ATTEMPTS) {
-    await Otp.deleteOne({ _id: otpDoc._id });
-    throw new Error("Too many attempts. Please request a new OTP.");
+    await otpRepo.deleteOtps({ _id: otpDoc._id });
+    throw new AppError({ message: "Too many attempts. Please request a new OTP.", statusCode: 429, errorCode: "OTP_ATTEMPTS_EXCEEDED" });
   }
 
   if (otpDoc.otp !== hashedOtp) {
     otpDoc.attempts += 1;
     await otpDoc.save();
-    throw new Error(`Invalid OTP. ${MAX_ATTEMPTS - otpDoc.attempts} attempts remaining.`);
+    throw new AppError({ message: `Invalid OTP. ${MAX_ATTEMPTS - otpDoc.attempts} attempts remaining.`, statusCode: 400, errorCode: "OTP_MISMATCH" });
   }
 
   otpDoc.verified = true;
@@ -115,12 +115,12 @@ export const verifyOtpService = async (email, otp, purpose) => {
 
 export const deleteOtpService = async (email, purpose) => {
   const emailLower = email.toLowerCase().trim();
-  await Otp.deleteMany({ emailId: emailLower, purpose });
+  await otpRepo.deleteOtps({ emailId: emailLower, purpose });
 };
 
 export const isOtpVerified = async (email, purpose) => {
   const emailLower = email.toLowerCase().trim();
-  const otpDoc = await Otp.findOne({
+  const otpDoc = await otpRepo.findOtp({
     emailId: emailLower,
     purpose,
     verified: true,

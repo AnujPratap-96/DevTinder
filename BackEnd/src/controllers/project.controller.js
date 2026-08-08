@@ -23,27 +23,27 @@ export const createProjectController = asyncHandler(async (req, res) => {
     description: req.body?.description,
     techStack: req.body?.techStack,
   });
-  return successResponse(res, { statusCode: 201, data: { project } });
+  return successResponse(res, { statusCode: 201, message: "Project created", data: { project } });
 });
 
 export const listProjectsController = asyncHandler(async (req, res) => {
-  const projects = await listProjects({ status: req.query?.status, userId: req.user._id });
-  return successResponse(res, { data: { projects } });
+  const data = await listProjects({ status: req.query?.status, userId: req.user._id, limit: req.query?.limit, cursor: req.query?.cursor });
+  return successResponse(res, { message: "Projects fetched", data });
 });
 
 export const listMyProjectsController = asyncHandler(async (req, res) => {
-  const projects = await listMyProjects(req.user._id);
-  return successResponse(res, { data: { projects } });
+  const data = await listMyProjects(req.user._id, req.query);
+  return successResponse(res, { message: "Your projects fetched", data });
 });
 
 export const requestProjectJoinController = asyncHandler(async (req, res) => {
   const result = await requestProjectJoin({ projectId: req.body?.projectId, userId: req.user._id });
-  return successResponse(res, { data: result });
+  return successResponse(res, { message: "Join request sent", data: { request: result } });
 });
 
 export const listProjectRequestsController = asyncHandler(async (req, res) => {
   const requests = await listProjectRequests({ projectId: req.params.projectId, userId: req.user._id });
-  return successResponse(res, { data: { requests } });
+  return successResponse(res, { message: "Project requests fetched", data: { requests } });
 });
 
 export const respondProjectRequestController = asyncHandler(async (req, res) => {
@@ -62,12 +62,12 @@ export const removeProjectMemberController = asyncHandler(async (req, res) => {
     memberId: req.params.memberId,
     userId: req.user._id,
   });
-  return successResponse(res, { data: result });
+  return successResponse(res, { message: "Member removed", data: { project: result } });
 });
 
 export const getProjectController = asyncHandler(async (req, res) => {
   const project = await getProjectDetails({ projectId: req.params.projectId, userId: req.user._id });
-  return successResponse(res, { data: { project } });
+  return successResponse(res, { message: "Project fetched", data: { project } });
 });
 
 export const addProjectMessageController = asyncHandler(async (req, res) => {
@@ -77,22 +77,22 @@ export const addProjectMessageController = asyncHandler(async (req, res) => {
     message: req.body?.message,
     mentions: req.body?.mentions,
   });
-  return successResponse(res, { statusCode: 201, data: { message } });
+  return successResponse(res, { statusCode: 201, message: "Message added", data: { message } });
 });
 
 export const listProjectMessagesController = asyncHandler(async (req, res) => {
   const data = await listProjectMessages({
     projectId: req.params.projectId,
     userId: req.user._id,
-    page: req.query?.page,
     limit: req.query?.limit,
+    cursor: req.query?.cursor,
   });
-  return successResponse(res, { data });
+  return successResponse(res, { message: "Messages fetched", data });
 });
 
 export const deleteAllProjectsController = asyncHandler(async (req, res) => {
   const result = await deleteAllProjects({ user: req.user });
-  return successResponse(res, { data: result });
+  return successResponse(res, { message: "All projects deleted", data: { result } });
 });
 
 export const updateProjectController = asyncHandler(async (req, res) => {
@@ -104,10 +104,10 @@ export const updateProjectController = asyncHandler(async (req, res) => {
     techStack: req.body?.techStack,
     status: req.body?.status,
   });
-  return successResponse(res, { data: { project }, message: "Project updated successfully" });
+  return successResponse(res, { message: "Project updated successfully", data: { project } });
 });
 
 export const deleteProjectController = asyncHandler(async (req, res) => {
   const result = await deleteProject({ projectId: req.params.projectId, userId: req.user._id });
-  return successResponse(res, { data: result });
+  return successResponse(res, { message: "Project deleted", data: { result } });
 });

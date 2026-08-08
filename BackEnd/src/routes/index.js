@@ -15,6 +15,9 @@ import adminRouter from "./admin.routes.js";
 import aiRouter from "./ai.routes.js";
 import planRouter from "./plan.routes.js";
 import cronRouter from "./cron.routes.js";
+import callRouter from "./call.routes.js";
+import inviteRouter from "./invite.routes.js";
+import enhancementRouter from "../enhancements/enhancement.routes.js"; // [PHASE-1]
 
 const router = Router();
 
@@ -32,6 +35,9 @@ router.use("/", bookmarkRouter);
 router.use("/", githubRouter);
 router.use("/", adminRouter);
 router.use("/", aiRouter);
+router.use("/", inviteRouter);
 router.use("/plans", planRouter);
+router.use("/calls", callRouter);
+router.use("/", enhancementRouter); // [PHASE-1] chat enhancements (voice notes, reactions, search, prefs)
 
 export default router;

@@ -28,10 +28,25 @@ export const formatNotification = (doc) => {
   return { _id, type, isRead, createdAt, readAt, payload: safePayload };
 };
 
+export const listNotifications = (filter = {}, { limit = 20, cursor = null } = {}) => {
+  const query = { ...filter };
+  if (cursor) query._id = { $lt: cursor };
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+  return Notification.find(query).sort({ createdAt: -1 }).limit(pageSize + 1).lean();
+};
+
 export const createNotification = (payload) => Notification.create(payload);
 
 export const deleteNotificationById = (notificationId, userId) =>
   Notification.findOneAndDelete({ _id: notificationId, userId }).exec();
+
+export const updateNotifications = (userId, notificationIds = [], updates) => {
+  const query = { userId };
+  if (notificationIds?.length) {
+    query._id = { $in: notificationIds };
+  }
+  return Notification.updateMany(query, { $set: updates }).exec();
+};
 
 export const deleteAllNotifications = (userId) =>
   Notification.deleteMany({ userId }).exec();

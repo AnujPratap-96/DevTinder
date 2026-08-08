@@ -10,12 +10,14 @@ import {
   deleteOtpService,
   isOtpVerified,
 } from "./otpService.js";
-import { findUserByEmail } from "../repositories/user.repository.js";
+import { findUserByEmail, updateUserById, saveUser } from "../repositories/user.repository.js";
 import { AppError, ValidationError } from "../errors/index.js";
 import { generateSignJWT } from "../middlewares/signupauth.js";
 import { run as sendEmail } from "../utils/sendEmail.js";
 import logger from "../utils/logger.js";
 import User from "../models/user.model.js";
+import * as twoFactorService from "../security/twoFactor.service.js"; // [PHASE-3]
+import * as sessionService from "../security/session.service.js"; // [PHASE-3]
 
 const ALLOWED_PURPOSES = ["signup", "login", "reset-password"];
 
@@ -49,7 +51,7 @@ export const sendOtp = async ({ email, purpose }) => {
   }
 
   await generateOtpService(normalisedEmail, purpose);
-  return { email: normalisedEmail }; // informational payload
+  return { email: normalisedEmail };
 };
 
 export const verifyOtp = async ({ email, otp, purpose }) => {
@@ -83,7 +85,7 @@ export const resetPassword = async ({ email, newPassword }) => {
 
   const hash = await bcrypt.hash(newPassword, 10);
   user.password = hash;
-  await user.save();
+  await saveUser(user);
   await deleteOtpService(normalisedEmail, "reset-password");
 
   return { email: normalisedEmail };
@@ -149,7 +151,7 @@ export const completeSignup = async ({
     gender,
     password: hash,
   });
-  await user.save();
+  await saveUser(user);
 
   try {
     const subject = "Welcome to DevTinder! 🚀";
@@ -169,6 +171,11 @@ export const completeSignup = async ({
   } catch (error) {
     logger.warn("Failed to send welcome email", error);
   }
+
+  const { acceptInviteByEmail } = await import("../services/invite.service.js");
+  acceptInviteByEmail({ email: normalisedEmail, acceptedBy: user._id }).catch((e) =>
+    logger.warn("Failed to accept pending invites", e)
+  );
 
   await deleteOtpService(normalisedEmail, "signup");
 
@@ -192,15 +199,41 @@ export const login = async ({ emailId, password }) => {
     throw new ValidationError("Invalid credentials");
   }
 
-  // Do NOT set isOnline here — the WebSocket 'session:register' event is the
-  // sole source of truth for online status. Setting it over HTTP creates a
-  // race condition where the flag can get permanently stuck as true if the
-  // socket never connects or if the server restarts before logout.
+  // [PHASE-3] Two-factor gate: password is correct, but a TOTP code is
+  // required before any session is issued.
+  if (await twoFactorService.isEnabledForUser(user._id)) {
+    const tempToken = twoFactorService.createTempLoginToken(user._id);
+    return { user: null, twoFactorRequired: true, tempToken };
+  }
+
   user.lastSeenAt = new Date();
-  await user.save();
+  await saveUser(user);
 
   const token = await user.getJWT();
   return { user, token };
+};
+
+export const verifyTwoFactorLogin = async ({ tempToken, token }) => {
+  if (!tempToken || !token) {
+    throw new ValidationError("Two-factor token and code are required");
+  }
+
+  const payload = twoFactorService.decodeTempLoginToken(tempToken);
+  const user = await findUserById(payload._id);
+  if (!user) {
+    throw new AppError({ message: "User not found", statusCode: 404 });
+  }
+  if (!user.twoFactorEnabled) {
+    throw new ValidationError("Two-factor authentication is not enabled");
+  }
+
+  await twoFactorService.verifyLoginCode({ userId: user._id, token });
+
+  user.lastSeenAt = new Date();
+  await saveUser(user);
+
+  const accessToken = await user.getJWT();
+  return { user, token: accessToken };
 };
 
 const getGoogleProfile = async (credential) => {
@@ -306,7 +339,7 @@ const upsertOAuthUser = async ({ email, firstName, lastName, avatarUrl, provider
   }
 
   user.calculateProfileStrength();
-  await user.save();
+  await saveUser(user);
   return user;
 };
 
@@ -348,21 +381,36 @@ export const oauthLogin = async ({ provider, credential, code, accessToken }) =>
     user.githubProfile = user.githubProfile || {};
     user.githubProfile.username = profile.username;
     user.githubProfile.lastSyncedAt = new Date();
-    await user.save();
+    await saveUser(user);
   }
 
   const token = await user.getJWT();
   return { user, token };
 };
 
+export const generateAndStoreRefreshToken = async (user) => {
+  const token = await user.getRefreshJWT();
+  user.refreshToken = token;
+  await saveUser(user);
+  return token;
+};
+
+export const rotateRefreshToken = async (user) => {
+  const token = await user.getRefreshJWT();
+  user.refreshToken = token;
+  await saveUser(user);
+  return token;
+};
+
+export const clearRefreshToken = async (userId) => {
+  await updateUserById(userId, { $set: { refreshToken: null } });
+};
+
 export const logout = async (userId) => {
-  // Belt-and-suspenders: mark the user offline on explicit logout.
-  // The socket 'disconnect' event is the primary mechanism, but this
-  // ensures the flag is cleared even if the socket is in a bad state.
   if (userId) {
     try {
-      await User.findByIdAndUpdate(userId, {
-        $set: { isOnline: false, lastSeenAt: new Date() },
+      await updateUserById(userId, {
+        $set: { isOnline: false, lastSeenAt: new Date(), refreshToken: null },
       });
     } catch (error) {
       logger.warn("Failed to mark user offline on logout", error);

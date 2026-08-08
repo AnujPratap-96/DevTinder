@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
-import User from "../models/user.model.js";
-import Report from "../models/report.js";
+import * as userRepo from "../repositories/user.repository.js";
+import * as reportRepo from "../repositories/report.repository.js";
+import Message from "../models/message.js"; // [PHASE-3]
 import { ValidationError, AppError } from "../errors/index.js";
 
 export const listUsers = async ({
@@ -38,7 +39,7 @@ export const listUsers = async ({
   }
 
   const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
-  const docs = await User.find(filter)
+  const docs = await userRepo.findUsers(filter)
     .select("firstName lastName emailId role availability isAdmin isBanned createdAt")
     .sort({ _id: 1 })
     .limit(pageSize + 1)
@@ -81,7 +82,7 @@ export const getUserPublic = async (userId) => {
   if (!userId || !mongoose.isValidObjectId(userId)) {
     throw new ValidationError("Valid userId is required");
   }
-  const user = await User.findById(userId).select(PUBLIC_USER_FIELDS).lean();
+  const user = await userRepo.findUserById(userId).select(PUBLIC_USER_FIELDS).lean();
   if (!user) {
     throw new AppError({ message: "User not found", statusCode: 404 });
   }
@@ -89,12 +90,7 @@ export const getUserPublic = async (userId) => {
 };
 
 export const listReports = async () => {
-  return Report.find()
-    .populate("reporterId", "firstName lastName emailId")
-    .populate("reportedUserId", "firstName lastName emailId")
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .lean();
+  return reportRepo.findReportsPopulated();
 };
 
 export const banUser = async (userId) => {
@@ -102,7 +98,7 @@ export const banUser = async (userId) => {
     throw new ValidationError("Valid userId is required");
   }
 
-  const user = await User.findById(userId);
+  const user = await userRepo.findUserById(userId);
   if (!user) {
     throw new AppError({ message: "User not found", statusCode: 404 });
   }
@@ -111,13 +107,13 @@ export const banUser = async (userId) => {
   user.isBanned = true;
   user.bannedAt = new Date();
   user.blockedUsers = [];
-  await user.save();
+  await userRepo.saveUser(user);
 
   return { userId };
 };
 
 export const listBanned = async () => {
-  return User.find({ isBanned: true })
+  return userRepo.findUsers({ isBanned: true })
     .select("firstName lastName emailId role membershipType createdAt bannedAt")
     .sort({ bannedAt: -1 })
     .lean();
@@ -128,14 +124,14 @@ export const unbanUser = async (userId) => {
     throw new ValidationError("Valid userId is required");
   }
 
-  const user = await User.findById(userId);
+  const user = await userRepo.findUserById(userId);
   if (!user) {
     throw new AppError({ message: "User not found", statusCode: 404 });
   }
 
   user.isBanned = false;
   user.availability = "open";
-  await user.save();
+  await userRepo.saveUser(user);
 
   return { userId };
 };
@@ -149,7 +145,7 @@ export const resolveReport = async ({ reportId, status, reviewerId }) => {
     throw new ValidationError("Invalid status");
   }
 
-  const report = await Report.findById(reportId);
+  const report = await reportRepo.findReportById(reportId);
   if (!report) {
     throw new AppError({ message: "Report not found", statusCode: 404 });
   }
@@ -160,6 +156,45 @@ export const resolveReport = async ({ reportId, status, reviewerId }) => {
   await report.save();
 
   return report;
+};
+
+// ── [PHASE-3] moderation review queue ────────────────────────────────────
+
+export const listFlaggedMessages = async ({ limit = 20, cursor = null } = {}) => {
+  const filter = { "moderation.flagged": true };
+  if (cursor) {
+    if (!mongoose.isValidObjectId(cursor)) {
+      throw new ValidationError("Invalid cursor");
+    }
+    filter._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+  }
+
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+  const docs = await Message.find(filter)
+    .populate("senderId", "firstName lastName emailId photoUrl")
+    .sort({ createdAt: -1 })
+    .limit(pageSize + 1)
+    .lean();
+
+  const hasMore = docs.length > pageSize;
+  const messages = hasMore ? docs.slice(0, pageSize) : docs;
+  const nextCursor = hasMore ? messages[messages.length - 1]._id : null;
+  return { messages, nextCursor, hasMore };
+};
+
+export const reviewFlaggedMessage = async ({ messageId, reviewerId }) => {
+  if (!messageId || !mongoose.isValidObjectId(messageId)) {
+    throw new ValidationError("Valid messageId is required");
+  }
+  const message = await Message.findByIdAndUpdate(
+    messageId,
+    { $set: { "moderation.reviewedAt": new Date(), "moderation.reviewedBy": reviewerId } },
+    { new: true }
+  );
+  if (!message) {
+    throw new AppError({ message: "Message not found", statusCode: 404 });
+  }
+  return message;
 };
 
 export default {

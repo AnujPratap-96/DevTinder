@@ -122,6 +122,29 @@ export const projectInviteTemplate = ({ projectTitle, ownerName }) => {
   });
 };
 
+export const inviteEmailTemplate = ({ senderName }) => {
+  const title = "You're Invited to DevTinder!";
+  const content = `
+    <p>Hi there,</p>
+    <p><strong>${senderName}</strong> has invited you to join <strong>${APP_NAME}</strong> — the platform where developers connect, collaborate, and build together.</p>
+    <p>Here's what you can do on DevTinder:</p>
+    <ul style="text-align: left; color: #1e293b; line-height: 1.8;">
+      <li>Swipe and connect with like-minded developers</li>
+      <li>Join collaborative projects</li>
+      <li>Chat, voice & video call with your network</li>
+      <li>Showcase your tech stack and find your next teammate</li>
+    </ul>
+    <p>Come join us — we'd love to have you!</p>
+  `;
+
+  return generateBaseTemplate({
+    title,
+    content,
+    ctaText: "Join DevTinder",
+    ctaLink: `${APP_URL}/register`,
+  });
+};
+
 export default {
   otpEmailTemplate,
   forgotPasswordTemplate,
@@ -129,4 +152,5 @@ export default {
   connectionRequestTemplate,
   matchEmailTemplate,
   projectInviteTemplate,
+  inviteEmailTemplate,
 };
