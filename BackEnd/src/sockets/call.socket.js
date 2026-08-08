@@ -10,6 +10,12 @@ import logger from "../utils/logger.js";
 import { randomUUID } from "crypto";
 
 const inviteTimeouts = new Map();
+const disconnectTimers = new Map();
+
+// Grace period after a socket drop before an active call is torn down.
+// Short network blips / tab switches reconnect the socket within a second or
+// two — we only end the call if the user stays offline for this long.
+const DISCONNECT_GRACE_MS = 5000;
 
 const INVITE_RATE_WINDOW_MS = 30000;
 const INVITE_RATE_MAX = 10;
@@ -39,36 +45,57 @@ const clearInviteTimeout = (callId) => {
   }
 };
 
+const cancelDisconnectTimer = (callId) => {
+  const t = disconnectTimers.get(callId);
+  if (t) {
+    clearTimeout(t);
+    disconnectTimers.delete(callId);
+  }
+};
+
 const createCallMessage = async ({ io, chatId, callerId, calleeId, callId, type, status, durationSec }) => {
   if (!chatId) return null;
   const clientMessageId = `call-${callId}-${status}`;
-  const exists = await Message.findOne({ clientMessageId });
+  const exists = await Message.findOne({ clientMessageId }).lean();
   if (exists) return exists;
-  const msg = await Message.create({
-    matchId: chatId,
-    senderId: callerId,
-    receiverId: calleeId,
-    clientMessageId,
-    message: "",
-    isEncrypted: false,
-    messageType: "call",
-    metadata: {
-      callDetails: { type, status, durationSec: durationSec || 0 },
-    },
-  });
-  await Chat.findByIdAndUpdate(chatId, { $set: { lastMessageAt: msg.createdAt || new Date() } });
-  const populated = await Message.findById(msg._id).populate("senderId", "firstName lastName photoUrl").lean();
-  if (io) io.to(chatId.toString()).emit("message:created", populated);
-  return populated;
+  try {
+    const msg = await Message.create({
+      matchId: chatId,
+      senderId: callerId,
+      receiverId: calleeId,
+      clientMessageId,
+      message: "",
+      isEncrypted: false,
+      messageType: "call",
+      metadata: {
+        callDetails: { type, status, durationSec: durationSec || 0 },
+      },
+    });
+    await Chat.findByIdAndUpdate(chatId, { $set: { lastMessageAt: msg.createdAt || new Date() } });
+    const populated = await Message.findById(msg._id).populate("senderId", "firstName lastName photoUrl").lean();
+    if (io) io.to(chatId.toString()).emit("message:created", populated);
+    return populated;
+  } catch (err) {
+    // E11000 duplicate key: the timeout and a hangup raced and both tried to
+    // write the same `call-<id>-<status>` entry. Not an error — return the
+    // winner so exactly one missed/ended entry exists per call.
+    if (err?.code === 11000) {
+      const existing = await Message.findOne({ clientMessageId }).lean();
+      return existing;
+    }
+    logger.warn("call message creation failed", err);
+    return null;
+  }
 };
 
 const scheduleMissed = (io, callId) => {
   const t = setTimeout(async () => {
     inviteTimeouts.delete(callId);
     try {
+      if (!callManager.getCall(callId)) return; // call already ended/hung up
       const session = await callService.endCall(callId, "timeout");
       if (session) {
-        createCallMessage({
+        await createCallMessage({
           io,
           chatId: session.chatId,
           callerId: session.callerId,
@@ -154,6 +181,15 @@ export const initializeCallSocket = (io) => {
           },
           chatId: session.chatId,
         });
+
+        // Socket present in the registry but dead (ghost) — the invite is
+        // lost. Fail fast instead of letting the callee ring forever.
+        if (!delivered) {
+          await callService.endCall(session.callId, "timeout");
+          socket.emit("call:unavailable", { message: "User is not reachable right now." });
+          return;
+        }
+
         socket.emit("call:created", {
           callId: session.callId,
           type: session.type,
@@ -192,7 +228,8 @@ export const initializeCallSocket = (io) => {
         if (!call || call.calleeId !== userId.toString()) return;
         await callService.endCall(callId, "decline");
         clearInviteTimeout(callId);
-        createCallMessage({
+        cancelDisconnectTimer(callId);
+        await createCallMessage({
           io,
           chatId: call.chatId,
           callerId: call.callerId,
@@ -239,6 +276,7 @@ export const initializeCallSocket = (io) => {
         if (!call || (call.callerId !== userId.toString() && call.calleeId !== userId.toString())) return;
         const session = await callService.endCall(callId, reason);
         clearInviteTimeout(callId);
+        cancelDisconnectTimer(callId);
         emitToUser(otherParty(call, userId), "call:end", { callId, reason });
         if (!session) return;
         // Instagram-style: exactly one chat entry per call.
@@ -247,7 +285,7 @@ export const initializeCallSocket = (io) => {
         //   → "Missed call"
         // - declined calls are handled by `call:decline`.
         if (session.connectedAt) {
-          createCallMessage({
+          await createCallMessage({
             io,
             chatId: call.chatId || session.chatId,
             callerId: call.callerId,
@@ -258,7 +296,7 @@ export const initializeCallSocket = (io) => {
             durationSec: session.durationSec || 0,
           });
         } else if (session.status !== "declined") {
-          createCallMessage({
+          await createCallMessage({
             io,
             chatId: call.chatId || session.chatId,
             callerId: call.callerId,
@@ -280,11 +318,43 @@ export const initializeCallSocket = (io) => {
       const callId = callManager.getActiveCallIdForUser(userId);
       if (!callId) return;
       const call = callManager.getCall(callId);
-      callManager.removeCall(callId);
-      if (call) {
-        const other = call.callerId === userId.toString() ? call.calleeId : call.callerId;
-        emitToUser(other, "call:end", { callId, reason: "disconnected" });
-      }
+      if (!call) return;
+
+      // The user may still have other live sockets (second tab) or may
+      // reconnect within the grace window (network blip) — only tear the
+      // call down if they stay completely gone.
+      const userSockets = activeUsers.get(userId);
+      if (userSockets && userSockets.size > 0) return;
+      if (disconnectTimers.has(callId)) return;
+
+      const other = call.callerId === userId ? call.calleeId : call.callerId;
+      const t = setTimeout(async () => {
+        disconnectTimers.delete(callId);
+        try {
+          const liveSockets = activeUsers.get(userId);
+          if (liveSockets && liveSockets.size > 0) return; // reconnected in time
+          if (!callManager.getCall(callId)) return; // call ended meanwhile
+          callManager.removeCall(callId);
+          clearInviteTimeout(callId);
+          const session = await callService.endCall(callId, "disconnected");
+          emitToUser(other, "call:end", { callId, reason: "disconnected" });
+          if (session?.connectedAt) {
+            await createCallMessage({
+              io,
+              chatId: call.chatId || session.chatId,
+              callerId: call.callerId,
+              calleeId: call.calleeId,
+              callId,
+              type: call.type,
+              status: "ended",
+              durationSec: session.durationSec || 0,
+            });
+          }
+        } catch (err) {
+          logger.warn("call:disconnect handling failed", err);
+        }
+      }, DISCONNECT_GRACE_MS);
+      disconnectTimers.set(callId, t);
     });
   });
 };

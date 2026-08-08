@@ -140,6 +140,11 @@ const initializeSocket = (server) => {
       origin: config.cors.origins,
       credentials: config.cors.credentials,
     },
+    // Detect dead sockets quickly (default is ~45s) so stale socket ids are
+    // removed from the active registry instead of silently swallowing
+    // call invites and messages after a network drop.
+    pingInterval: 15000,
+    pingTimeout: 8000,
   });
   ioInstance = io;
 
