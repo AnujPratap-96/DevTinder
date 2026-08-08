@@ -12,6 +12,10 @@ import logger from "./utils/logger.js";
 
 const app = express();
 
+// Behind a reverse proxy (Render/Railway) → trust X-Forwarded-For so the rate
+// limiter keys on the real client IP instead of throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set("trust proxy", config.isProduction ? 1 : false);
+
 app.use(
   cors({
     origin: config.cors.origins,
