@@ -26,6 +26,10 @@ const secureCookieFlags = (req) => {
   return {
     httpOnly: true,
     secure: isHttps,
+    // Frontend (Vercel) and API (Render) are cross-site; partition the cookie
+    // to the frontend's top-level site so Chrome's third-party cookie blocking
+    // does not drop it (works in incognito too).
+    partitioned: true,
     sameSite: isHttps ? "none" : "lax",
   };
 };
