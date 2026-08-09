@@ -1,16 +1,12 @@
-/**
- * enhancement.service.js — Phase-1 chat enhancement services.
- * Self-contained module: does not alter any pre-existing chat logic.
- */
 import { v2 as cloudinary } from "cloudinary";
 import { randomUUID } from "crypto";
 import Chat from "../models/chat.js";
 import Message from "../models/message.js";
 import config from "../config/env.js";
+import FEATURES from "../config/features.js";
 import { getIO } from "../utils/socket.js";
 import { AppError, NotFoundError, ValidationError } from "../errors/index.js";
 import * as chatRepo from "../repositories/chat.repository.js";
-import ENHANCEMENTS from "./enhancement.config.js";
 import logger from "../utils/logger.js";
 
 cloudinary.config({
@@ -48,7 +44,7 @@ const assertChatAccess = async (matchId, userId) => {
  * be replaced cleanly by the existing upsert logic.
  */
 export const uploadVoiceNote = async ({ userId, targetUserId, matchId, file, clientMessageId, durationSec }) => {
-  if (!ENHANCEMENTS.voiceNotes.enabled) throw new AppError({ message: "Voice notes are disabled", statusCode: 400 });
+  if (!FEATURES.voiceNotes.enabled) throw new AppError({ message: "Voice notes are disabled", statusCode: 400 });
   if (!file) throw new ValidationError("Audio file is required");
   if (!userId || !targetUserId) throw new ValidationError("userId and targetUserId are required");
 
@@ -64,7 +60,7 @@ export const uploadVoiceNote = async ({ userId, targetUserId, matchId, file, cli
 
   const uploadResult = await uploadToCloudinary(file, {
     resourceType: "auto",
-    folder: ENHANCEMENTS.voiceNotes.folder,
+    folder: FEATURES.voiceNotes.folder,
   });
   if (!uploadResult?.secure_url) {
     throw new AppError({ message: "Voice note upload failed", statusCode: 500 });
@@ -96,8 +92,8 @@ export const uploadVoiceNote = async ({ userId, targetUserId, matchId, file, cli
 /**
  * Search messages within a chat (text match or pinned-only).
  */
-export const searchMessages = async ({ userId, matchId, query, pinnedOnly = false, limit = ENHANCEMENTS.chatSearch.maxResults }) => {
-  if (!ENHANCEMENTS.chatSearch.enabled) throw new AppError({ message: "Chat search is disabled", statusCode: 400 });
+export const searchMessages = async ({ userId, matchId, query, pinnedOnly = false, limit = FEATURES.chatSearch.maxResults }) => {
+  if (!FEATURES.chatSearch.enabled) throw new AppError({ message: "Chat search is disabled", statusCode: 400 });
   await assertChatAccess(matchId, userId);
 
   const filter = { matchId };
@@ -114,32 +110,11 @@ export const searchMessages = async ({ userId, matchId, query, pinnedOnly = fals
 };
 
 /**
- * Toggle the pinned state of a message (only the sender of the message can pin it).
- */
-export const togglePinMessage = async ({ userId, messageId }) => {
-  if (!ENHANCEMENTS.chatPrefs.enabled) throw new AppError({ message: "Pinning is disabled", statusCode: 400 });
-  const message = await Message.findById(messageId);
-  if (!message) throw new NotFoundError("Message");
-  if (message.senderId.toString() !== userId.toString()) {
-    throw new AppError({ message: "You can only pin your own messages", statusCode: 403 });
-  }
-
-  const pinnedAt = message.pinnedAt ? null : new Date();
-  await Message.updateOne({ _id: messageId }, { $set: { pinnedAt } });
-
-  const io = getIO();
-  if (io) {
-    io.to(message.matchId.toString()).emit("message:pinned", { messageId, matchId: message.matchId, pinnedAt });
-  }
-  return { messageId, pinnedAt };
-};
-
-/**
  * Return pin/mute prefs for every chat of the current user.
  * Shape: { [matchId]: { pinned, muted } }
  */
 export const getChatPrefs = async (userId) => {
-  if (!ENHANCEMENTS.chatPrefs.enabled) throw new AppError({ message: "Chat prefs are disabled", statusCode: 400 });
+  if (!FEATURES.chatPrefs.enabled) throw new AppError({ message: "Chat prefs are disabled", statusCode: 400 });
   const chats = await Chat.find({ participants: userId }).select("prefs").lean();
   const result = {};
   for (const chat of chats) {
@@ -155,7 +130,7 @@ export const getChatPrefs = async (userId) => {
  * Set pin/mute preferences for the current user on a chat.
  */
 export const setChatPref = async ({ userId, matchId, pinned, muted }) => {
-  if (!ENHANCEMENTS.chatPrefs.enabled) throw new AppError({ message: "Chat prefs are disabled", statusCode: 400 });
+  if (!FEATURES.chatPrefs.enabled) throw new AppError({ message: "Chat prefs are disabled", statusCode: 400 });
   const chat = await assertChatAccess(matchId, userId);
 
   const prefs = chat.prefs?.get?.(userId.toString()) || {};
@@ -175,7 +150,7 @@ export const setChatPref = async ({ userId, matchId, pinned, muted }) => {
  * on a message, then broadcast the updated reaction list to the chat room.
  */
 export const addReaction = async ({ userId, matchId, messageId, emoji }) => {
-  if (!ENHANCEMENTS.reactions.enabled) throw new AppError({ message: "Reactions are disabled", statusCode: 400 });
+  if (!FEATURES.reactions.enabled) throw new AppError({ message: "Reactions are disabled", statusCode: 400 });
   await assertChatAccess(matchId, userId);
 
   const message = await Message.findById(messageId);
@@ -200,7 +175,7 @@ export const addReaction = async ({ userId, matchId, messageId, emoji }) => {
       );
     }
   } else {
-    if (reactions.length >= ENHANCEMENTS.reactions.maxPerMessage) {
+    if (reactions.length >= FEATURES.reactions.maxPerMessage) {
       throw new AppError({ message: "Maximum reactions reached for this message", statusCode: 400 });
     }
     nextReactions = [...reactions, { userId, emoji, createdAt: new Date() }];
@@ -218,7 +193,6 @@ export const addReaction = async ({ userId, matchId, messageId, emoji }) => {
 export default {
   uploadVoiceNote,
   searchMessages,
-  togglePinMessage,
   getChatPrefs,
   setChatPref,
   addReaction,

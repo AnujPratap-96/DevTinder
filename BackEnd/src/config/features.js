@@ -1,9 +1,8 @@
 /**
- * enhancement.config.js — Phase-1 feature flags (chat enhancements).
+ * Feature flags for chat extras (voice notes, reactions, search, prefs).
  * Set any flag to false to disable that feature without touching code.
  */
-const ENHANCEMENTS = {
-  enabled: true,
+const FEATURES = {
   voiceNotes: {
     enabled: true,
     maxFileSizeMb: 5,
@@ -25,4 +24,4 @@ const ENHANCEMENTS = {
   },
 };
 
-export default ENHANCEMENTS;
+export default FEATURES;

@@ -1,12 +1,9 @@
-/**
- * enhancement.controller.js — Phase-1 chat enhancement HTTP handlers.
- */
 import { successResponse } from "../utils/response.js";
 import { asyncHandler } from "../utils/async-handler.js";
-import * as enhancementService from "./enhancement.service.js";
+import * as chatEnhancementService from "../services/chat-enhancement.service.js";
 
 export const uploadVoiceNoteController = asyncHandler(async (req, res) => {
-  const message = await enhancementService.uploadVoiceNote({
+  const message = await chatEnhancementService.uploadVoiceNote({
     userId: req.user._id,
     targetUserId: req.body.targetUserId,
     matchId: req.body.matchId,
@@ -18,7 +15,7 @@ export const uploadVoiceNoteController = asyncHandler(async (req, res) => {
 });
 
 export const searchMessagesController = asyncHandler(async (req, res) => {
-  const messages = await enhancementService.searchMessages({
+  const messages = await chatEnhancementService.searchMessages({
     userId: req.user._id,
     matchId: req.query.matchId,
     query: req.query.q || "",
@@ -28,21 +25,13 @@ export const searchMessagesController = asyncHandler(async (req, res) => {
   return successResponse(res, { message: "Messages fetched", data: { messages } });
 });
 
-export const togglePinMessageController = asyncHandler(async (req, res) => {
-  const result = await enhancementService.togglePinMessage({
-    userId: req.user._id,
-    messageId: req.params.messageId,
-  });
-  return successResponse(res, { message: "Message pin updated", data: result });
-});
-
 export const getChatPrefsController = asyncHandler(async (req, res) => {
-  const prefs = await enhancementService.getChatPrefs(req.user._id);
+  const prefs = await chatEnhancementService.getChatPrefs(req.user._id);
   return successResponse(res, { message: "Chat prefs fetched", data: { prefs } });
 });
 
 export const setChatPrefController = asyncHandler(async (req, res) => {
-  const result = await enhancementService.setChatPref({
+  const result = await chatEnhancementService.setChatPref({
     userId: req.user._id,
     matchId: req.body.matchId,
     pinned: req.body.pinned,
@@ -52,7 +41,7 @@ export const setChatPrefController = asyncHandler(async (req, res) => {
 });
 
 export const reactToMessageController = asyncHandler(async (req, res) => {
-  const reactions = await enhancementService.addReaction({
+  const reactions = await chatEnhancementService.addReaction({
     userId: req.user._id,
     matchId: req.body.matchId,
     messageId: req.params.messageId,
@@ -64,7 +53,6 @@ export const reactToMessageController = asyncHandler(async (req, res) => {
 export default {
   uploadVoiceNoteController,
   searchMessagesController,
-  togglePinMessageController,
   getChatPrefsController,
   setChatPrefController,
   reactToMessageController,

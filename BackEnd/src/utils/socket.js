@@ -6,7 +6,7 @@ import User from "../models/user.model.js";
 import { createNotification, formatNotification } from "../repositories/notification.repository.js";
 import { getPlanLimits } from "./planConfig.js";
 import initializeCallSocket from "../sockets/call.socket.js";
-import { initializeEnhancementSocket } from "../enhancements/enhancement.socket.js"; // [PHASE-1]
+import { initializeChatEnhancementSocket } from "../sockets/chat-enhancement.socket.js";
 import config from "../config/env.js";
 import logger from "./logger.js";
 import { buildModerationUpdate } from "../security/moderation.service.js"; // [PHASE-3]
@@ -149,7 +149,7 @@ const initializeSocket = (server) => {
   ioInstance = io;
 
   initializeCallSocket(io);
-  initializeEnhancementSocket(io); // [PHASE-1] chat enhancements (reactions)
+  initializeChatEnhancementSocket(io);
 
   io.on("connection", (socketInstance) => {
     socketInstance.on("session:register", async ({ userId }) => {
