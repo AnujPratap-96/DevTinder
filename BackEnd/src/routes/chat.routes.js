@@ -6,6 +6,8 @@ import {
   markMessagesSeenController,
   deleteMessageController,
   uploadChatImageController,
+  pinMessageController,
+  unpinMessageController,
 } from "../controllers/chat.controller.js";
 import { userAuth } from "../middlewares/auth.js";
 import { requireMinimumPlan } from "../middlewares/requirePlan.js";
@@ -21,6 +23,8 @@ router.get("/chat/:targetUserId", ...planGuard, getChatController);
 router.get("/messages/:matchId", ...planGuard, listMessagesController);
 router.patch("/messages/seen", ...planGuard, markMessagesSeenController);
 router.delete("/messages/:messageId", ...planGuard, deleteMessageController);
+router.post("/chat/:chatId/pin", ...planGuard, pinMessageController);
+router.delete("/chat/:chatId/pin", ...planGuard, unpinMessageController);
 router.post(
   "/chat/upload",
   ...planGuard,

@@ -1,7 +1,8 @@
 import * as inviteRepo from "../repositories/invite.repository.js";
 import * as userRepo from "../repositories/user.repository.js";
 import { run as sendEmail } from "../utils/sendEmail.js";
-import { inviteEmailTemplate } from "../utils/emailTemplates/templates.js";
+import renderTemplate from "../utils/emailTemplates/renderTemplate.js";
+import { APP_URL } from "../utils/emailTemplates/constants.js";
 import { emitToUser } from "../utils/socket.js";
 import { AppError, ValidationError } from "../errors/index.js";
 import { getPlanLimits } from "../utils/planConfig.js";
@@ -37,7 +38,11 @@ export const sendInvite = async ({ userId, email }) => {
 
   try {
     const subject = `${senderName} invited you to DevTinder!`;
-    const html = inviteEmailTemplate({ senderName });
+    const html = renderTemplate("invite", {
+      senderName,
+      ctaText: "Join DevTinder",
+      ctaLink: `${APP_URL}/register`,
+    });
     await sendEmail(subject, html, email);
   } catch (err) {
     await inviteRepo.updateInvite({ _id: invite._id }, { status: "cancelled" });

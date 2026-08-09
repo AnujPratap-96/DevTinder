@@ -1,12 +1,15 @@
 import SibApiV3Sdk from "sib-api-v3-sdk";
 
-import {
-  otpEmailTemplate,
-  forgotPasswordTemplate,
-  welcomeEmailTemplate,
-} from "./emailTemplates/templates.js";
+import renderTemplate from "./emailTemplates/renderTemplate.js";
+import { APP_URL } from "./emailTemplates/constants.js";
 import config from "../config/env.js";
 import logger from "./logger.js";
+
+const purposeIntro = {
+  signup: "Your account verification code is below. This code will expire in 5 minutes.",
+  login: "Your login verification code is below. This code will expire in 5 minutes.",
+  "reset-password": "Your password reset code is below. This code will expire in 5 minutes.",
+};
 
 export const sendOtpEmail = async (toEmail, otp, purpose = "signup") => {
   try {
@@ -30,7 +33,10 @@ export const sendOtpEmail = async (toEmail, otp, purpose = "signup") => {
         email: "officialthakur94@gmail.com",
       },
       subject: template.subject,
-      htmlContent: otpEmailTemplate({ otp, purpose }),
+      htmlContent: renderTemplate("otp", {
+        intro: purposeIntro[purpose] || purposeIntro.signup,
+        otp,
+      }),
     });
   } catch (error) {
     logger.error("Failed to send OTP email", error);
@@ -52,7 +58,10 @@ export const sendForgotPasswordEmail = async (toEmail, resetLink) => {
         email: "officialthakur94@gmail.com",
       },
       subject: "Reset Your DevTinder Password",
-      htmlContent: forgotPasswordTemplate({ resetLink }),
+      htmlContent: renderTemplate("forgot-password", {
+        ctaText: "Reset Password",
+        ctaLink: resetLink,
+      }),
     });
   } catch (error) {
     logger.error("Failed to send password reset email", error);
@@ -74,7 +83,11 @@ export const sendWelcomeEmail = async (toEmail, firstName) => {
         email: "officialthakur94@gmail.com",
       },
       subject: "Welcome to DevTinder! 🎉",
-      htmlContent: welcomeEmailTemplate({ firstName }),
+      htmlContent: renderTemplate("welcome", {
+        firstName,
+        ctaText: "Explore Now",
+        ctaLink: APP_URL,
+      }),
     });
   } catch (error) {
     logger.warn("Failed to send welcome email", error);

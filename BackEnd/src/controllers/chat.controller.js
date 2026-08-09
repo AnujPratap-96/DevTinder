@@ -6,6 +6,8 @@ import {
   markMessagesSeenService,
   deleteMessageService,
   uploadChatImage,
+  pinMessageService,
+  unpinMessageService,
 } from "../services/chat.service.js";
 
 export const getChatController = asyncHandler(async (req, res) => {
@@ -52,4 +54,21 @@ export const uploadChatImageController = asyncHandler(async (req, res) => {
     file: req.file,
   });
   return successResponse(res, { message: "Image uploaded", data: { message } });
+});
+
+export const pinMessageController = asyncHandler(async (req, res) => {
+  const pinnedMessage = await pinMessageService({
+    chatId: req.params.chatId,
+    messageId: req.body?.messageId,
+    userId: req.user._id,
+  });
+  return successResponse(res, { message: "Message pinned", data: { message: pinnedMessage } });
+});
+
+export const unpinMessageController = asyncHandler(async (req, res) => {
+  const result = await unpinMessageService({
+    chatId: req.params.chatId,
+    userId: req.user._id,
+  });
+  return successResponse(res, { message: "Message unpinned", data: result });
 });

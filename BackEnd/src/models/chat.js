@@ -45,6 +45,13 @@ const chatSchema = new mongoose.Schema(
       default: {},
     },
     // ── [/PHASE-1] ────────────────────────────────────────────────────────
+    // One pinned message per chat (WhatsApp-style). The message row also gets
+    // `pinnedAt` set by the pin service so clients can badge it.
+    pinnedMessageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -35,6 +35,27 @@ export const findMessages = (filter, { limit = 20, cursor = null, sort = { creat
 
 export const deleteMessageById = (id) => Message.findByIdAndDelete(id);
 
+export const setMessagePinned = (messageId, pinnedAt) =>
+  Message.findByIdAndUpdate(messageId, { $set: { pinnedAt } });
+
+export const pinChatMessage = (chatId, messageId) =>
+  Chat.findByIdAndUpdate(chatId, { $set: { pinnedMessageId: messageId } });
+
+export const unpinChatMessage = (chatId) =>
+  Chat.findByIdAndUpdate(chatId, { $unset: { pinnedMessageId: 1 } });
+
+// Clear the chat's pinned reference when the pinned message itself is deleted.
+export const unpinChatOnMessageDelete = (messageId) =>
+  Chat.findOneAndUpdate({ pinnedMessageId: messageId }, { $unset: { pinnedMessageId: 1 } }).lean();
+
+export const populatePinnedMessage = (chatId) =>
+  Chat.findById(chatId)
+    .populate({
+      path: "pinnedMessageId",
+      populate: { path: "senderId", select: "firstName lastName photoUrl" },
+    })
+    .lean();
+
 export const markMessagesAsSeen = ({ matchId, receiverId }) =>
   Message.markAsSeen({ matchId, receiverId });
 

@@ -23,11 +23,14 @@ export const getChatWithUser = async ({ userId, targetUserId, limit = 20, cursor
   const messages = hasMore ? docs.slice(0, pageSize) : docs;
   const nextCursor = hasMore ? messages[messages.length - 1]._id : null;
 
+  const chatWithPin = await chatRepo.populatePinnedMessage(chat._id);
+
   return {
     chat: {
       matchId: chat._id,
       participants: chat.participants,
       lastMessageAt: chat.lastMessageAt,
+      pinnedMessage: chatWithPin.pinnedMessageId ?? null,
     },
     messages: messages.reverse(),
     nextCursor,
@@ -53,10 +56,13 @@ export const listChatMessages = async ({ matchId, userId, limit = 20, cursor = n
   const messages = hasMore ? docs.slice(0, pageSize) : docs;
   const nextCursor = hasMore ? messages[messages.length - 1]._id : null;
 
+  const chatWithPin = await chatRepo.populatePinnedMessage(matchId);
+
   return {
     messages: messages.reverse(),
     nextCursor,
     hasMore,
+    pinnedMessage: chatWithPin.pinnedMessageId ?? null,
   };
 };
 
@@ -94,7 +100,78 @@ export const deleteMessageService = async ({ messageId, userId }) => {
   }
 
   await chatRepo.deleteMessageById(messageId);
+
+  // If the deleted message was pinned, clear the chat reference so the pin
+  // banner never points at a missing row.
+  const unpinnedChat = await chatRepo.unpinChatOnMessageDelete(messageId);
+  if (unpinnedChat) {
+    const io = getIO();
+    if (io) io.to(unpinnedChat._id.toString()).emit("message:unpinned", { chatId: unpinnedChat._id.toString() });
+  }
+
   return message;
+};
+
+export const pinMessageService = async ({ chatId, messageId, userId }) => {
+  if (!chatId || !messageId) {
+    throw new ValidationError("chatId and messageId are required");
+  }
+
+  const chat = await chatRepo.findChatByIdLean(chatId);
+  if (!chat) {
+    throw new NotFoundError("Conversation");
+  }
+  const isParticipant = chat.participants.some((participant) => participant.toString() === userId.toString());
+  if (!isParticipant) {
+    throw new AppError({ message: "You are not part of this conversation", statusCode: 403 });
+  }
+
+  const message = await chatRepo.findMessageById(messageId);
+  if (!message) {
+    throw new NotFoundError("Message");
+  }
+  if (message.matchId.toString() !== chatId.toString()) {
+    throw new ValidationError("Message does not belong to this conversation");
+  }
+
+  await Promise.all([
+    chatRepo.setMessagePinned(messageId, new Date()),
+    chatRepo.pinChatMessage(chatId, messageId),
+  ]);
+
+  const updated = await chatRepo.populatePinnedMessage(chatId);
+  const pinnedMessage = updated.pinnedMessageId;
+
+  const io = getIO();
+  if (io) {
+    io.to(chatId.toString()).emit("message:pinned", { chatId, message: pinnedMessage });
+  }
+
+  return pinnedMessage;
+};
+
+export const unpinMessageService = async ({ chatId, userId }) => {
+  if (!chatId) {
+    throw new ValidationError("chatId is required");
+  }
+
+  const chat = await chatRepo.findChatByIdLean(chatId);
+  if (!chat) {
+    throw new NotFoundError("Conversation");
+  }
+  const isParticipant = chat.participants.some((participant) => participant.toString() === userId.toString());
+  if (!isParticipant) {
+    throw new AppError({ message: "You are not part of this conversation", statusCode: 403 });
+  }
+
+  await chatRepo.unpinChatMessage(chatId);
+
+  const io = getIO();
+  if (io) {
+    io.to(chatId.toString()).emit("message:unpinned", { chatId });
+  }
+
+  return { unpinned: true };
 };
 
 export const uploadChatImage = async ({ userId, targetUserId, matchId, file }) => {
@@ -145,4 +222,6 @@ export default {
   markMessagesSeenService,
   deleteMessageService,
   uploadChatImage,
+  pinMessageService,
+  unpinMessageService,
 };

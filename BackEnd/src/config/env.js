@@ -70,6 +70,9 @@ const config = {
   github: {
     appUrl: process.env.APP_URL,
   },
+  // Live frontend origin used in emails (invite links, CTAs, footer). Override
+  // with FRONTEND_URL when a custom domain is wired up.
+  frontendUrl: process.env.FRONTEND_URL || "https://dev-tinder-frontend-six-virid.vercel.app",
   webrtc: {
     stunUrls: toArray(process.env.STUN_URLS) || ["stun:stun.l.google.com:19302"],
     turnUrls: toArray(process.env.TURN_URLS) || [],
