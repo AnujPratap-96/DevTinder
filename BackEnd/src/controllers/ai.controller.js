@@ -44,7 +44,7 @@ export const generateBioController = asyncHandler(async (req, res) => {
   }
 
   const bio = await generateBio(payload);
-  return successResponse(res, { message: "Bio generated", data: bio });
+  return successResponse(res, { message: "Bio generated", data: { bio } });
 });
 
 export const suggestSkillsController = asyncHandler(async (req, res) => {
@@ -56,7 +56,7 @@ export const suggestSkillsController = asyncHandler(async (req, res) => {
   };
 
   const suggestions = await suggestSkills(payload);
-  return successResponse(res, { message: "Skill suggestions ready", data: suggestions });
+  return successResponse(res, { message: "Skill suggestions ready", data: { suggestions } });
 });
 
 export const generateIcebreakerController = asyncHandler(async (req, res) => {
@@ -74,7 +74,7 @@ export const generateIcebreakerController = asyncHandler(async (req, res) => {
   }
 
   const message = await generateIcebreaker({ sender: req.user, receiver });
-  return successResponse(res, { message: "Icebreaker generated", data: message });
+  return successResponse(res, { message: "Icebreaker generated", data: { message } });
 });
 
 export const explainMatchController = asyncHandler(async (req, res) => {
@@ -92,7 +92,7 @@ export const explainMatchController = asyncHandler(async (req, res) => {
   }
 
   const points = await explainMatch({ userA: req.user, userB: targetUser });
-  return successResponse(res, { message: "Match explanation ready", data: points });
+  return successResponse(res, { message: "Match explanation ready", data: { points } });
 });
 
 export const projectDescriptionController = asyncHandler(async (req, res) => {
@@ -101,7 +101,7 @@ export const projectDescriptionController = asyncHandler(async (req, res) => {
     throw new ValidationError("title is required to generate a description.");
   }
   const description = await generateProjectDescription({ title, techStack });
-  return successResponse(res, { message: "Project description generated", data: description });
+  return successResponse(res, { message: "Project description generated", data: { description } });
 });
 
 export const projectTechStackController = asyncHandler(async (req, res) => {
@@ -110,7 +110,7 @@ export const projectTechStackController = asyncHandler(async (req, res) => {
     throw new ValidationError("Provide either title or description to suggest a tech stack.");
   }
   const suggestions = await suggestProjectTechStack({ title, description });
-  return successResponse(res, { message: "Tech stack suggestions ready", data: suggestions });
+  return successResponse(res, { message: "Tech stack suggestions ready", data: { suggestions } });
 });
 
 export const projectRoadmapController = asyncHandler(async (req, res) => {
