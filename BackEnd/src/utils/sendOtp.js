@@ -19,9 +19,9 @@ export const sendOtpEmail = async (toEmail, otp, purpose = "signup") => {
     const emailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
     const purposeMap = {
-      signup: { subject: "Your DevTinder Verification OTP" },
-      login: { subject: "Your DevTinder Login OTP" },
-      "reset-password": { subject: "Your DevTinder Password Reset OTP" },
+      signup: { subject: "Your DevConnect Verification OTP" },
+      login: { subject: "Your DevConnect Login OTP" },
+      "reset-password": { subject: "Your DevConnect Password Reset OTP" },
     };
 
     const template = purposeMap[purpose] || purposeMap.signup;
@@ -29,7 +29,7 @@ export const sendOtpEmail = async (toEmail, otp, purpose = "signup") => {
     await emailApi.sendTransacEmail({
       to: [{ email: toEmail }],
       sender: {
-        name: "DevTinder",
+        name: "DevConnect",
         email: "officialthakur94@gmail.com",
       },
       subject: template.subject,
@@ -54,10 +54,10 @@ export const sendForgotPasswordEmail = async (toEmail, resetLink) => {
     await emailApi.sendTransacEmail({
       to: [{ email: toEmail }],
       sender: {
-        name: "DevTinder",
+        name: "DevConnect",
         email: "officialthakur94@gmail.com",
       },
-      subject: "Reset Your DevTinder Password",
+      subject: "Reset Your DevConnect Password",
       htmlContent: renderTemplate("forgot-password", {
         ctaText: "Reset Password",
         ctaLink: resetLink,
@@ -79,10 +79,10 @@ export const sendWelcomeEmail = async (toEmail, firstName) => {
     await emailApi.sendTransacEmail({
       to: [{ email: toEmail }],
       sender: {
-        name: "DevTinder",
+        name: "DevConnect",
         email: "officialthakur94@gmail.com",
       },
-      subject: "Welcome to DevTinder! 🎉",
+      subject: "Welcome to DevConnect! 🎉",
       htmlContent: renderTemplate("welcome", {
         firstName,
         ctaText: "Explore Now",

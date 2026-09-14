@@ -7,7 +7,7 @@ const SECURITY = {
   twoFactor: {
     enabled: true,
     tempTokenTtl: "5m",
-    issuer: "DevTinder",
+    issuer: "DevConnect",
   },
   sessions: {
     enabled: true,

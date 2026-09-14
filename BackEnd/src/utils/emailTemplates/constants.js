@@ -1,11 +1,11 @@
 import config from "../../config/env.js";
 
-export const APP_NAME = "DevTinder";
-// Live frontend. devtinder.online was the old branding domain and is not
+export const APP_NAME = "DevConnect";
+// Live frontend. devconnect.online was the old branding domain and is not
 // deployed anymore — emails must link to the real Vercel site. Override via
 // FRONTEND_URL if a custom domain is added later.
 export const APP_URL = config.frontendUrl;
-export const SUPPORT_EMAIL = "support@devtinder.app";
+export const SUPPORT_EMAIL = "support@devconnect.app";
 export const LOGO_URL = `${APP_URL}/logo.png`;
 
 export const PRIMARY_COLOR = "#6366f1";

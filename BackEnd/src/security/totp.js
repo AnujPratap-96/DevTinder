@@ -42,7 +42,7 @@ export const base32Decode = (input) => {
 
 export const generateSecret = (bytes = 20) => base32Encode(crypto.randomBytes(bytes));
 
-export const generateOtpUri = ({ secret, accountName, issuer = "DevTinder" }) =>
+export const generateOtpUri = ({ secret, accountName, issuer = "DevConnect" }) =>
   `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(accountName)}` +
   `?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 

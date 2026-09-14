@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">DevTinder - Developer Networking Platform</h1>
+  <h1 align="center">DevConnect - Developer Networking Platform</h1>
   <p align="center">A full-stack MERN application where developers discover each other, match, chat securely, collaborate on projects, upgrade memberships, and manage trust and safety workflows.</p>
 </p>
 
@@ -40,9 +40,9 @@
 
 ## Overview
 
-DevTinder is a developer-first social networking platform built with Express, MongoDB, React, Redux, Socket.io, and Tailwind CSS. It combines swipe-style profile discovery with connection requests, secure messaging, project collaboration, AI profile/project helpers, paid membership limits, and moderation tooling.
+DevConnect is a developer-first social networking platform built with Express, MongoDB, React, Redux, Socket.io, and Tailwind CSS. It combines swipe-style profile discovery with connection requests, secure messaging, project collaboration, AI profile/project helpers, paid membership limits, and moderation tooling.
 
-The `Devtinder` folder contains the backend application under `BackEnd/`. The frontend lives separately in `../DevTinder-FrontEnd`.
+The `DevConnect` folder contains the backend application under `BackEnd/`. The frontend lives separately in `../DevConnect-FrontEnd`.
 
 ---
 
@@ -140,7 +140,7 @@ AI usage is plan-gated through membership limits.
 
 ### 7. Projects & Collaboration
 
-DevTinder includes a project workspace for finding collaborators:
+DevConnect includes a project workspace for finding collaborators:
 
 - Create, update, delete, and explore projects
 - Project tech stack, status, members, owners, and admins
@@ -236,24 +236,169 @@ The server includes safety and admin operations:
 ## Project Structure
 
 ```text
-Devtinder/
-|-- README.md
-`-- BackEnd/
-    |-- package.json
-    `-- src/
-        |-- app.js                         # Express app, middleware, health route, error handling
-        |-- server.js                      # DB connection, plan seeding, Socket.io startup
-        |-- config/                        # env, database, multer, feature flags
-        |-- controllers/                   # Request handlers by feature
-        |-- routes/                        # Express route modules
-        |-- services/                      # Business logic and integrations
-        |-- repositories/                  # Mongoose query helpers
-        |-- models/                        # User, chat, message, plan, project, payment, reports, calls
-        |-- middlewares/                   # Auth, validation, plan limits, rate limits, errors
-        |-- sockets/                       # Call and chat-enhancement socket handlers
-        |-- security/                      # 2FA, sessions, moderation
-        |-- validations/                   # Zod validation schemas
-        `-- utils/                         # Email, Cloudinary, Razorpay, socket, logging, responses
+DevConnect-main/
+├── README.md
+└── BackEnd/
+    ├── package.json                            # Scripts and dependencies
+    ├── package-lock.json
+    ├── .gitignore
+    └── src/
+        ├── app.js                              # Express app configuration, security middleware, route mounting & error handling
+        ├── server.js                           # Server bootstrap, MongoDB connection, plan seeding & Socket.io initialization
+        ├── config/
+        │   ├── database.js                     # MongoDB connection via Mongoose
+        │   ├── env.js                          # Environment variable validation and defaults
+        │   ├── features.js                     # Feature toggles and flags
+        │   └── multer.js                       # Cloudinary Multer storage configuration
+        ├── constants/
+        │   └── user.constants.js               # Enums, roles, status constants
+        ├── controllers/                        # Domain controllers
+        │   ├── admin.controller.js             # User moderation, reports, and ban handling
+        │   ├── ai.controller.js                # Mistral AI bio, icebreakers & project helpers
+        │   ├── auth.controller.js              # Login, register, OTP verification, password reset
+        │   ├── bookmark.controller.js          # Profile bookmarking CRUD
+        │   ├── call.controller.js              # WebRTC call session initiation and STUN/TURN tokens
+        │   ├── chat.controller.js              # Direct messaging and conversation history
+        │   ├── chat-enhancement.controller.js  # Reactions, GIFs, audio voice notes, search
+        │   ├── github.controller.js            # GitHub profile and repository synchronization
+        │   ├── invite.controller.js            # Email invitation sending and referral tracking
+        │   ├── notification.controller.js      # User notifications and unread counters
+        │   ├── payment.controller.js           # Razorpay order generation and webhook verification
+        │   ├── plan.controller.js              # Membership plans and tier limits
+        │   ├── profile.controller.js           # Developer profile view, edit, and strength metrics
+        │   ├── project.controller.js           # Collaboration projects, join requests, and threads
+        │   ├── request.controller.js           # Connection requests (interested, ignored, accept, reject)
+        │   ├── safety.controller.js            # User blocking, reporting, and moderation flags
+        │   └── user.controller.js              # Feed discovery and search by skills/location
+        ├── errors/                             # Standardized error hierarchy
+        │   ├── AppError.js                     # Base application error class
+        │   ├── index.js                        # Central error re-exports
+        │   ├── NotFoundError.js                # 404 HTTP exception
+        │   └── ValidationError.js             # 400 Bad request / schema validation exception
+        ├── middlewares/                        # Express middleware pipeline
+        │   ├── auth.js                         # JWT authentication and user session verification
+        │   ├── error.middleware.js             # Global centralized error handler
+        │   ├── inviteDailyLimit.js             # Daily email referral rate limiter
+        │   ├── planLimits.js                   # Plan-gated feature quotas (AI, views, connections)
+        │   ├── rateLimiter.js                  # Global and route-specific DDoS/brute-force rate limiting
+        │   ├── requirePlan.js                  # Tier-based route access guard (Silver/Gold)
+        │   ├── signupauth.js                   # Pre-registration verification guard
+        │   └── validate.js                     # Zod request validation wrapper
+        ├── models/                             # Mongoose schemas and indexes
+        │   ├── bookmark.js                     # Saved profile records
+        │   ├── callSession.js                  # WebRTC call logs and session durations
+        │   ├── chat.js                         # Conversation metadata and participant links
+        │   ├── connectionRequest.js            # Connection status (interested, ignored, accepted, rejected)
+        │   ├── cronState.js                    # Cron job state persistence
+        │   ├── invite.js                       # Referral tracking records
+        │   ├── message.js                      # Chat messages, reactions, voice notes, read status
+        │   ├── notification.js                 # Push/in-app alert records
+        │   ├── otp.model.js                    # Cryptographic OTP storage with TTL expiry
+        │   ├── payment.js                      # Razorpay order and transaction history
+        │   ├── plan.js                         # Membership tier specifications and limits
+        │   ├── profileView.js                  # Profile visitor logs
+        │   ├── project.js                      # Collaboration projects, member roles, and join requests
+        │   ├── report.js                       # User and message safety reports
+        │   ├── session.js                      # Multi-device session tracking and token records
+        │   ├── twoFactor.js                    # TOTP secrets and 2FA recovery state
+        │   └── user.model.js                   # User profile, skills, GeoJSON location, password hash
+        ├── repositories/                       # Database abstraction and data access layer
+        │   ├── bookmark.repository.js
+        │   ├── call.repository.js
+        │   ├── chat.repository.js
+        │   ├── connectionRequest.repository.js
+        │   ├── invite.repository.js
+        │   ├── notification.repository.js
+        │   ├── otp.repository.js
+        │   ├── payment.repository.js
+        │   ├── plan.repository.js
+        │   ├── profileView.repository.js
+        │   ├── project.repository.js
+        │   ├── report.repository.js
+        │   └── user.repository.js
+        ├── routes/                             # API route declarations
+        │   ├── index.js                        # Aggregated router mounting all sub-routes
+        │   ├── admin.routes.js                 # /admin/* endpoints
+        │   ├── ai.routes.js                    # /ai/* endpoints
+        │   ├── auth.routes.js                  # /auth/* endpoints
+        │   ├── bookmark.routes.js              # /bookmark/* endpoints
+        │   ├── call.routes.js                  # /call/* endpoints
+        │   ├── chat.routes.js                  # /chat/* endpoints
+        │   ├── chat-enhancement.routes.js      # /chat-enhancement/* endpoints
+        │   ├── cron.routes.js                  # Scheduled task maintenance endpoints
+        │   ├── github.routes.js                # /github/* endpoints
+        │   ├── invite.routes.js                # /invite/* endpoints
+        │   ├── notification.routes.js          # /notification/* endpoints
+        │   ├── payment.routes.js               # /payment/* endpoints
+        │   ├── plan.routes.js                  # /plan/* endpoints
+        │   ├── profile.routes.js               # /profile/* endpoints
+        │   ├── project.routes.js               # /project/* endpoints
+        │   ├── request.routes.js               # /request/* endpoints
+        │   ├── safety.routes.js                # /safety/* endpoints
+        │   └── user.routes.js                  # /user/* endpoints
+        ├── security/                           # Trust, safety & cryptographic services
+        │   ├── moderation.service.js           # Automated content filtering and abuse detection
+        │   ├── security.config.js              # Security headers, cookies, and CORS configuration
+        │   ├── session.service.js              # Device session revocation and token cycling
+        │   ├── totp.js                         # RFC 6238 TOTP generation and verification
+        │   └── twoFactor.service.js            # Two-factor authentication lifecycle management
+        ├── services/                           # Core business logic layer
+        │   ├── admin.service.js
+        │   ├── aiService.js
+        │   ├── auth.service.js
+        │   ├── bookmark.service.js
+        │   ├── call.service.js
+        │   ├── callManager.js
+        │   ├── chat.service.js
+        │   ├── chat-enhancement.service.js
+        │   ├── github.service.js
+        │   ├── invite.service.js
+        │   ├── notification.service.js
+        │   ├── otpService.js
+        │   ├── payment.service.js
+        │   ├── plan.service.js
+        │   ├── profile.service.js
+        │   ├── project.service.js
+        │   ├── request.service.js
+        │   ├── safety.service.js
+        │   └── user.service.js
+        ├── sockets/                            # WebSocket event handlers
+        │   ├── call.socket.js                  # WebRTC peer signaling (offer, answer, ICE candidates)
+        │   └── chat-enhancement.socket.js      # Typing indicators, live reactions, message delivery
+        ├── utils/                              # Shared utilities and helpers
+        │   ├── api-errors.js
+        │   ├── async-handler.js
+        │   ├── cloudinary.js
+        │   ├── cronJob.js
+        │   ├── emailTemplates/
+        │   ├── generateOtp.js
+        │   ├── location.js
+        │   ├── logger.js
+        │   ├── notify.js
+        │   ├── planConfig.js
+        │   ├── razorpay.js
+        │   ├── response.js
+        │   ├── sendEmail.js
+        │   ├── sendOtp.js
+        │   ├── socket.js
+        │   ├── usage.js
+        │   └── validation.js
+        └── validations/                        # Zod schema definitions
+            ├── admin.validation.js
+            ├── auth.validation.js
+            ├── bookmark.validation.js
+            ├── call.validation.js
+            ├── chat.validation.js
+            ├── github.validation.js
+            ├── invite.validation.js
+            ├── notification.validation.js
+            ├── payment.validation.js
+            ├── plan.validation.js
+            ├── profile.validation.js
+            ├── project.validation.js
+            ├── request.validation.js
+            ├── safety.validation.js
+            └── user.validation.js
 ```
 
 ---
@@ -272,13 +417,13 @@ Devtinder/
 ### Install Dependencies
 
 ```bash
-cd Devtinder/BackEnd
+cd DevConnect/BackEnd
 npm install
 ```
 
 ### Configure Environment
 
-Create a `.env` file in `Devtinder/BackEnd`.
+Create a `.env` file in `DevConnect/BackEnd`.
 
 ```bash
 MONGO_URI=your_mongodb_connection_string
@@ -338,7 +483,7 @@ The API runs on `http://localhost:3000` by default. Health check: `GET /health`.
 
 ## Available Scripts
 
-From `Devtinder/BackEnd`:
+From `DevConnect/BackEnd`:
 
 | Command | Description |
 |---|---|

@@ -70,7 +70,7 @@ const DEFAULT_PLANS = [
   {
     slug: "gold",
     name: "Gold",
-    description: "The full DevTinder experience.",
+    description: "The full DevConnect experience.",
     price: 50,
     currency: "INR",
     durationMonths: 6,

@@ -12,7 +12,7 @@ const run = async (subject, body, toEmailId) => {
   const emailPayload = {
     to: [{ email: toEmailId }],
     sender: {
-      name: "DevTinder",
+      name: "DevConnect",
       email: "officialthakur94@gmail.com",
     },
     subject,

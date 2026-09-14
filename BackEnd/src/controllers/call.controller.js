@@ -19,7 +19,7 @@ const buildIceServers = () => {
   if (turnUrls && turnUrls.length) {
     if (turnSecret) {
       const expiry = Math.floor(Date.now() / 1000) + turnTtlSec;
-      const username = `${expiry}:devtinder`;
+      const username = `${expiry}:devconnect`;
       const credential = crypto.createHmac("sha1", turnSecret).update(username).digest("base64");
       turnUrls.forEach((url) => servers.push({ urls: url, username, credential }));
     } else {

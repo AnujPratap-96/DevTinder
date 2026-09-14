@@ -18,7 +18,7 @@ export const sendInvite = async ({ userId, email }) => {
 
   const existingUser = await userRepo.findUserByEmail(email.toLowerCase());
   if (existingUser) {
-    throw new ValidationError("This person is already on DevTinder");
+    throw new ValidationError("This person is already on DevConnect");
   }
 
   const pending = await inviteRepo.findInvite({
@@ -37,10 +37,10 @@ export const sendInvite = async ({ userId, email }) => {
   const senderName = `${user.firstName} ${user.lastName || ""}`.trim();
 
   try {
-    const subject = `${senderName} invited you to DevTinder!`;
+    const subject = `${senderName} invited you to DevConnect!`;
     const html = renderTemplate("invite", {
       senderName,
-      ctaText: "Join DevTinder",
+      ctaText: "Join DevConnect",
       ctaLink: `${APP_URL}/register`,
     });
     await sendEmail(subject, html, email);

@@ -8,7 +8,7 @@ const fetchGithubProfile = async (accessToken) => {
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${accessToken}`,
-    "User-Agent": "DevTinder-App",
+    "User-Agent": "DevConnect-App",
   };
 
   const [profileRes, reposRes] = await Promise.all([

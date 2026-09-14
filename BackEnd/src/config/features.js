@@ -7,7 +7,7 @@ const FEATURES = {
     enabled: true,
     maxFileSizeMb: 5,
     maxDurationSec: 60,
-    folder: "DevTinder/voice-notes",
+    folder: "DevConnect/voice-notes",
   },
   reactions: {
     enabled: true,

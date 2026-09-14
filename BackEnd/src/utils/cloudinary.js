@@ -15,7 +15,7 @@ const uploadImageCloudinary = async (image) => {
       cloudinary.uploader
         .upload_stream(
           {
-            folder: "DevTinder",
+            folder: "DevConnect",
             // Cap source uploads + let Cloudinary auto-optimize delivery.
             // Clients additionally request on-the-fly w_/q_auto/f_auto via
             // `optimizePhotoUrl`, so stored originals stay reasonable.
