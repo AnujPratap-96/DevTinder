@@ -67,6 +67,7 @@ const config = {
   ai: {
     mistralApiKey: process.env.MISTRAL_API_KEY,
   },
+  redisUrl: process.env.REDIS_DB_URL || "redis://localhost:6379",
   github: {
     appUrl: process.env.APP_URL,
   },

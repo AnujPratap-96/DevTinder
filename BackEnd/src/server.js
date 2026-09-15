@@ -6,6 +6,7 @@ import { initializeSocket } from "./utils/socket.js";
 import { seedDefaultPlans } from "./services/plan.service.js";
 import logger from "./utils/logger.js";
 import User from "./models/user.model.js";
+import "./utils/emailQueue.js"; // Initialize the BullMQ email worker
 
 /**
  * On startup, any user whose isOnline flag is still true is a ghost —
